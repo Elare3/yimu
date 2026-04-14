@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@14:*)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma init:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(ls:*)",
+      "Bash(npx next build:*)",
+      "Bash(node -e:*)",
+      "Bash(npx:*)",
+      "Bash(node test-ai-quote.mjs:*)",
+      "Bash(tasklist:*)",
+      "Bash(node:*)",
+      "Bash(grep -r \"ActivityLog\\\\|Timeline\\\\|AuditLog\" /d/yimu/src --include=*.ts --include=*.tsx)",
+      "Bash(grep -r \"template\\\\|Template\" /d/yimu/src --include=*.ts --include=*.tsx)",
+      "Bash(grep -r \"upload\\\\|Upload\\\\|multer\\\\|formdata\\\\|FormData\" /d/yimu/src --include=*.ts --include=*.tsx -l)",
+      "Bash(find \"D:/yimu/src/app/\\(dashboard\\)\" -name \"page.tsx\")",
+      "Bash(git check-ignore:*)",
+      "Bash(find /d/yimu/src -type f \\\\\\(-name *.ts -o -name *.tsx \\\\\\))",
+      "Bash(xargs grep:*)",
+      "Bash(find /d/yimu -name *schema* -o -name *.prisma)",
+      "Bash(grep -i \"pricing\\\\|feedback\\\\|business.*memory\" /d/yimu/*.md)",
+      "Bash(grep -r \"contract\\\\|Contract\" /d/yimu/src/types --include=*.ts)",
+      "Bash(mkdir -p D:/yimu/src/app/api/pricing-feedback)",
+      "Bash(mkdir -p D:/yimu/src/app/api/business-memory)",
+      "Bash(mkdir -p D:/yimu/src/app/api/contracts/ai-generate)",
+      "Bash(wc -l /d/yimu/src/lib/*.ts /d/yimu/src/app/api/*/*.ts)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(npm ls:*)",
+      "WebSearch",
+      "Bash(grep -E \"\\\\.\\(ts|js|mjs|json|config\\)$\")",
+      "Bash(xxd)"
+    ]
+  }
+}

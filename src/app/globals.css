@@ -3,25 +3,37 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --bg: #FAF6F0;
+  --text: #2C2420;
+  --text-sec: #7A6E62;
+  --text-mut: #B5AA9E;
+  --primary: #C47D3F;
+  --primary-light: #D4956A;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+/* 页面切换淡入上滑 — 快速版，减少感知延迟 */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeUp 0.15s ease-out;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #E8E0D4; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #B5AA9E; }
+
+/* 衬线字体辅助类 */
+.font-display {
+  font-family: 'Georgia', 'Noto Serif SC', 'PingFang SC', serif;
 }

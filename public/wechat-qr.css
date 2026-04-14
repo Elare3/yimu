@@ -1,0 +1,22 @@
+.impowerBox .qrcode {
+  width: 200px;
+  margin: 0 auto;
+}
+.impowerBox .title {
+  display: none;
+}
+.impowerBox .info {
+  width: 200px;
+  margin: 0 auto;
+}
+.impowerBox .status {
+  text-align: center;
+  font-size: 13px;
+  color: #6B5E50;
+}
+.impowerBox .status.normal {
+  color: #6B5E50;
+}
+.impowerBox .status.success {
+  color: #07C160;
+}

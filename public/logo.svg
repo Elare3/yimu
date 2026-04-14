@@ -1,0 +1,10 @@
+<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logoGrad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C47D3F"/>
+      <stop offset="100%" stop-color="#D4940E"/>
+    </linearGradient>
+  </defs>
+  <rect width="36" height="36" rx="8" fill="url(#logoGrad)"/>
+  <text x="18" y="24" text-anchor="middle" fill="white" font-family="Georgia, 'Noto Serif SC', serif" font-size="16" font-weight="800">木</text>
+</svg>
