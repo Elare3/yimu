@@ -1,5 +1,5 @@
-import { SkeletonList } from '@/components/ui/Skeleton';
+import PageShimmer from '@/components/ui/PageShimmer';
 
 export default function FinanceLoading() {
-  return <SkeletonList columns={1} />;
+  return <PageShimmer />;
 }

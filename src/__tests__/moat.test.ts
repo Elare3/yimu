@@ -388,7 +388,7 @@ function createMockPrisma() {
         return q;
       }),
       findFirst: vi.fn(async ({ where }: any) => {
-        for (const q of store.quotes.values()) {
+        for (const q of Array.from(store.quotes.values())) {
           if (where.id && q.id !== where.id) continue;
           if (where.userId && q.userId !== where.userId) continue;
           return q;
@@ -414,7 +414,7 @@ function createMockPrisma() {
       }),
       findMany: vi.fn(async ({ where }: any) => {
         const results: any[] = [];
-        for (const p of store.projects.values()) {
+        for (const p of Array.from(store.projects.values())) {
           if (where?.userId && p.userId !== where.userId) continue;
           if (where?.status) {
             if (typeof where.status === 'object' && where.status.in) {
@@ -441,7 +441,7 @@ function createMockPrisma() {
       }),
       count: vi.fn(async ({ where }: any) => {
         let count = 0;
-        for (const p of store.projects.values()) {
+        for (const p of Array.from(store.projects.values())) {
           if (where?.userId && p.userId !== where.userId) continue;
           if (where?.status?.in && !where.status.in.includes(p.status)) continue;
           count++;
@@ -466,7 +466,7 @@ function createMockPrisma() {
       }),
       findFirst: vi.fn(async ({ where, orderBy }: any) => {
         const nodes: any[] = [];
-        for (const n of store.paymentNodes.values()) {
+        for (const n of Array.from(store.paymentNodes.values())) {
           if (where?.projectId && n.projectId !== where.projectId) continue;
           if (where?.status && n.status !== where.status) continue;
           if (where?.userId && n.userId !== where.userId) continue;
@@ -478,7 +478,7 @@ function createMockPrisma() {
       }),
       findMany: vi.fn(async ({ where }: any) => {
         const nodes: any[] = [];
-        for (const n of store.paymentNodes.values()) {
+        for (const n of Array.from(store.paymentNodes.values())) {
           if (where?.projectId && n.projectId !== where.projectId) continue;
           if (where?.userId && n.userId !== where.userId) continue;
           if (where?.status) {
@@ -497,7 +497,7 @@ function createMockPrisma() {
       }),
       updateMany: vi.fn(async ({ where, data }: any) => {
         let count = 0;
-        for (const n of store.paymentNodes.values()) {
+        for (const n of Array.from(store.paymentNodes.values())) {
           if (where?.projectId && n.projectId !== where.projectId) continue;
           if (where?.status) {
             if (typeof where.status === 'object' && where.status.in && !where.status.in.includes(n.status)) continue;
@@ -509,7 +509,7 @@ function createMockPrisma() {
       }),
       count: vi.fn(async ({ where }: any) => {
         let count = 0;
-        for (const n of store.paymentNodes.values()) {
+        for (const n of Array.from(store.paymentNodes.values())) {
           if (where?.projectId && n.projectId !== where.projectId) continue;
           count++;
         }
@@ -521,7 +521,7 @@ function createMockPrisma() {
       findUnique: vi.fn(async ({ where }: any) => {
         return store.clients.get(where.id) || null;
       }),
-      findMany: vi.fn(async () => [...store.clients.values()]),
+      findMany: vi.fn(async () => Array.from(store.clients.values())),
       update: vi.fn(async ({ where, data }: any) => {
         const c = store.clients.get(where.id);
         if (!c) return null;
@@ -545,7 +545,7 @@ function createMockPrisma() {
       }),
       aggregate: vi.fn(async ({ where }: any) => {
         let sum = 0;
-        for (const tx of store.transactions.values()) {
+        for (const tx of Array.from(store.transactions.values())) {
           if (where?.userId && tx.userId !== where.userId) continue;
           if (where?.type && tx.type !== where.type) continue;
           if (where?.date?.gte && new Date(tx.date) < new Date(where.date.gte)) continue;

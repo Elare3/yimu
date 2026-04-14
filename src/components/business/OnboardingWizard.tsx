@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/Button';
 import { toast } from '@/stores/toastStore';
 import useSWR from 'swr';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
 const STEPS = [
   {
     number: 1,
@@ -40,7 +38,7 @@ const STEPS = [
 
 export default function OnboardingWizard() {
   const router = useRouter();
-  const { data, mutate } = useSWR('/api/onboarding', fetcher);
+  const { data, mutate } = useSWR('/api/onboarding');
   const [demoLoading, setDemoLoading] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);

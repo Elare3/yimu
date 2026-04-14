@@ -130,7 +130,7 @@ export default function QuotesPage() {
         </div>
       </div>
 
-      {isLoading && <Loading />}
+      {isLoading && quotes.length === 0 && <Loading />}
 
       {!isLoading && quotes.length === 0 && (
         <div className="text-center py-16 text-brown-300">

@@ -134,12 +134,21 @@ export default function LoginPage() {
         state: 'yimu_' + Math.random().toString(36).slice(2, 10),
         style: 'black',
         href: cssHref,
+        stylelite: 1,
+        fast_login: 1,
+        color_scheme: 'light',
+        onReady(isReady: boolean) {
+          if (isReady && container) {
+            // 二维码 iframe 已加载，隐藏 loading
+            const loadingEl = container.querySelector('[data-qr-loading]');
+            if (loadingEl) (loadingEl as HTMLElement).style.display = 'none';
+          }
+        },
       });
     };
     document.head.appendChild(script);
 
     return () => {
-      // 清理
       if (script.parentNode) script.parentNode.removeChild(script);
     };
   }, [stage]);
@@ -424,8 +433,8 @@ export default function LoginPage() {
                     className="flex items-center justify-center"
                     style={{ minHeight: 230 }}
                   >
-                    {/* 加载中状态 */}
-                    <div className="flex flex-col items-center gap-3">
+                    {/* 加载中状态（onReady 回调后隐藏） */}
+                    <div data-qr-loading className="flex flex-col items-center gap-3">
                       <div className="w-8 h-8 border-2 border-[#07C160] border-t-transparent rounded-full animate-spin" />
                       <span className="text-brown-400 text-sm">二维码加载中...</span>
                     </div>

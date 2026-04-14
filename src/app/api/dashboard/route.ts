@@ -20,6 +20,7 @@ export async function GET() {
       upcomingPayments,
       monthlyTrend,
       quoteFunnel,
+      overduePayments,
     ] = await Promise.all([
       // 本月收入
       prisma.transaction.aggregate({
@@ -68,19 +69,18 @@ export async function GET() {
       getMonthlyTrend(userId),
       // 报价漏斗统计
       getQuoteFunnel(userId),
+      // 逾期收款数
+      prisma.paymentNode.count({
+        where: {
+          userId,
+          status: { in: ['pending', 'reminded'] },
+          dueDate: { lt: now },
+        },
+      }),
     ]);
 
     const totalIncome = monthlyIncome._sum.amount || 0;
     const totalExpense = monthlyExpense._sum.amount || 0;
-
-    // 逾期收款
-    const overduePayments = await prisma.paymentNode.count({
-      where: {
-        userId,
-        status: { in: ['pending', 'reminded'] },
-        dueDate: { lt: now },
-      },
-    });
 
     return successResponse({
       summary: {

@@ -103,8 +103,8 @@ export default function ClientsPage() {
       {/* 统计 */}
       <p className="text-brown-300 text-sm">共 {total} 位客户</p>
 
-      {/* 加载状态 — 骨架屏代替转圈 */}
-      {isLoading && (
+      {/* 加载状态 — 仅首次无缓存时显示骨架屏 */}
+      {isLoading && clients.length === 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} />

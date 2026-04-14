@@ -36,6 +36,7 @@ export default function OnboardingPage() {
   const { data: session, update } = useSession();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<OnboardingForm>({
     resolver: zodResolver(onboardingSchema),
@@ -68,7 +69,7 @@ export default function OnboardingPage() {
         router.push('/dashboard');
       }
     } catch {
-      // ignore
+      setSubmitError('提交失败，请重试');
     } finally {
       setSubmitting(false);
     }
@@ -196,6 +197,9 @@ export default function OnboardingPage() {
           </div>
 
           {/* 按钮 */}
+          {submitError && (
+            <p className="text-danger text-sm mb-2">{submitError}</p>
+          )}
           <div className="flex gap-3 pt-2">
             <button
               type="submit"

@@ -31,39 +31,4 @@ function Card({ children, hoverable = true, className = '', ...props }: CardProp
   );
 }
 
-interface CardHeaderProps {
-  children: ReactNode;
-  className?: string;
-}
-
-function CardHeader({ children, className = '' }: CardHeaderProps) {
-  return (
-    <div className={`px-6 py-4 border-b border-cream-200 ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-interface CardBodyProps {
-  children: ReactNode;
-  className?: string;
-}
-
-function CardBody({ children, className = '' }: CardBodyProps) {
-  return <div className={`px-6 py-4 ${className}`}>{children}</div>;
-}
-
-interface CardFooterProps {
-  children: ReactNode;
-  className?: string;
-}
-
-function CardFooter({ children, className = '' }: CardFooterProps) {
-  return (
-    <div className={`px-6 py-4 border-t border-cream-200 ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-export { Card, CardHeader, CardBody, CardFooter, type CardProps };
+export { Card, type CardProps };

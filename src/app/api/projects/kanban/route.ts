@@ -29,7 +29,7 @@ export async function GET(req: Request) {
         where: completedWhere,
         include: { client: { select: { id: true, name: true } } },
         orderBy: { completedAt: 'desc' },
-        take: completedSearch ? 20 : undefined,
+        take: completedSearch ? 20 : 50,
       }),
       // 已完成总数
       prisma.project.count({

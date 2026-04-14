@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTransition, useCallback, memo } from 'react';
+import { preloadRoute } from '@/lib/route-preload';
 
 const TABS = [
   {
@@ -87,6 +88,8 @@ function MobileNavInner() {
               key={tab.href}
               href={tab.href}
               prefetch={true}
+              onTouchStart={() => preloadRoute(tab.href)}
+              onMouseEnter={() => preloadRoute(tab.href)}
               onClick={(e) => {
                 if (!isActive) {
                   e.preventDefault();

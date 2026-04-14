@@ -190,7 +190,7 @@ export default function PaymentsPage() {
         </Button>
       </div>
 
-      {isLoading && <Loading />}
+      {isLoading && payments.length === 0 && <Loading />}
 
       {!isLoading && payments.length === 0 && (
         <div className="text-center py-16 text-brown-300">

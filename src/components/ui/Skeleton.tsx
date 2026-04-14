@@ -118,60 +118,9 @@ function SkeletonDashboard() {
   );
 }
 
-/** 项目看板骨架 */
-function SkeletonKanban() {
-  return (
-    <div className="space-y-6">
-      {/* 工具栏 */}
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-10 w-64 rounded-[14px]" />
-        <Skeleton className="h-10 w-24 rounded-button" />
-        <Skeleton className="h-10 w-24 rounded-button" />
-      </div>
-      {/* 看板列 */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <SkeletonKanbanColumn key={i} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Tailwind 需要完整类名（不能用模板拼接），预定义映射
-const GRID_COLS_MAP: Record<number, string> = {
-  2: 'lg:grid-cols-2',
-  3: 'lg:grid-cols-3',
-  4: 'lg:grid-cols-4',
-};
-
-/** 列表页骨架（客户/报价/记账/收款通用） */
-function SkeletonList({ columns = 3 }: { columns?: number }) {
-  const lgCols = GRID_COLS_MAP[columns] || 'lg:grid-cols-3';
-  return (
-    <div className="space-y-6">
-      {/* 搜索栏 */}
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-10 flex-1 max-w-md rounded-[14px]" />
-        <Skeleton className="h-10 w-28 rounded-button" />
-      </div>
-      <Skeleton className="h-3 w-20" />
-      {/* 卡片网格 */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${lgCols} gap-4`}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <SkeletonCard key={i} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export {
   Skeleton,
   SkeletonCard,
-  SkeletonSummaryCard,
   SkeletonKanbanColumn,
   SkeletonDashboard,
-  SkeletonKanban,
-  SkeletonList,
 };

@@ -30,7 +30,14 @@
       "Bash(npm ls:*)",
       "WebSearch",
       "Bash(grep -E \"\\\\.\\(ts|js|mjs|json|config\\)$\")",
-      "Bash(xxd)"
+      "Bash(xxd)",
+      "Bash(curl -s http://localhost:3099/api/auth/csrf)",
+      "Bash(python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\)['csrfToken']\\)\")",
+      "Bash(curl -s -b /tmp/yimu_cookies.txt http://localhost:3001/api/auth/csrf)",
+      "Bash(curl -v -c /tmp/yimu_cookies2.txt -b /tmp/yimu_cookies.txt -X POST http://localhost:3001/api/auth/callback/phone -H 'Content-Type: application/x-www-form-urlencoded' -d 'phone=13800138000&code=123456&csrfToken=__CMDSUB_OUTPUT__')",
+      "Bash(curl -s -b /tmp/yimu_cookies2.txt http://localhost:3001/api/payments)",
+      "Bash(curl -s -b /tmp/yimu_cookies2.txt -X POST http://localhost:3001/api/payments/69d85a1a9f41c77580d45cfc/remind -H 'Content-Type: application/json' -v)",
+      "Bash(curl -s -b /tmp/yimu_cookies2.txt -X POST http://localhost:3001/api/payments/69d85a1a9f41c77580d45cfc/remind -H \"Content-Type: application/json\")"
     ]
   }
 }

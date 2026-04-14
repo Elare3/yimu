@@ -23,8 +23,9 @@ export async function POST(req: Request) {
       return errorResponse('图片大小不能超过 2MB');
     }
 
-    // 生成文件名：userId + timestamp + ext
+    // 生成安全文件名：userId + timestamp + ext（不使用用户提供的文件名）
     const ext = file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1];
+    if (!/^[a-z]+$/.test(ext)) return errorResponse('不支持的图片格式');
     const filename = `${userId}_${Date.now()}.${ext}`;
 
     // 确保目录存在

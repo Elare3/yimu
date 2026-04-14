@@ -20,12 +20,16 @@ function checkRateLimit(key: string): boolean {
 }
 
 // 定期清理过期条目（防内存泄漏）
-setInterval(() => {
-  const now = Date.now();
-  rateLimitMap.forEach((entry, key) => {
-    if (now > entry.resetAt) rateLimitMap.delete(key);
-  });
-}, 60_000);
+if (typeof globalThis !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now();
+    rateLimitMap.forEach((entry, key) => {
+      if (now > entry.resetAt) rateLimitMap.delete(key);
+    });
+    // 硬上限：防止极端情况下内存无限增长
+    if (rateLimitMap.size > 10000) rateLimitMap.clear();
+  }, 60_000);
+}
 
 export default withAuth(
   async function middleware(req) {

@@ -78,4 +78,4 @@ function StatusBadge({
   );
 }
 
-export { Badge, StatusBadge, type BadgeProps, type BadgeVariant };
+export { StatusBadge, type BadgeVariant };

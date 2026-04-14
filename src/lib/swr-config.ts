@@ -14,7 +14,7 @@ export const swrConfig: SWRConfiguration = {
   fetcher,
   revalidateOnFocus: false,       // 切tab不重复请求
   revalidateOnReconnect: false,    // 断网恢复不重复请求
-  dedupingInterval: 5000,          // 5秒内同key去重
+  dedupingInterval: 10000,         // 10秒内同key去重（从5秒提升）
   keepPreviousData: true,          // 切换参数时保留旧数据，避免闪烁
   errorRetryCount: 2,              // 错误最多重试2次
 };

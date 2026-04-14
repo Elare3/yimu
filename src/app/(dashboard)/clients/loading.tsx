@@ -1,5 +1,5 @@
-import { SkeletonList } from '@/components/ui/Skeleton';
+import PageShimmer from '@/components/ui/PageShimmer';
 
 export default function ClientsLoading() {
-  return <SkeletonList columns={3} />;
+  return <PageShimmer />;
 }

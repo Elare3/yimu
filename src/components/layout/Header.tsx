@@ -99,7 +99,7 @@ function HeaderInner() {
 
   const title = Object.entries(PAGE_TITLES).find(
     ([path]) => pathname === path || pathname?.startsWith(path + '/')
-  )?.[1] || '一木';
+  )?.[1] || '';
 
   return (
     <header

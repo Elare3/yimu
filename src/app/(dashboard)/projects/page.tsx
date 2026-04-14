@@ -124,8 +124,8 @@ export default function ProjectsPage() {
         </Button>
       </div>
 
-      {/* 加载状态 */}
-      {isLoading && (
+      {/* 加载状态 — 仅首次无缓存时显示骨架屏 */}
+      {isLoading && Object.keys(columns).length === 0 && (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <SkeletonKanbanColumn key={i} />
@@ -134,7 +134,7 @@ export default function ProjectsPage() {
       )}
 
       {/* 看板 */}
-      {!isLoading && (
+      {(!isLoading || Object.keys(columns).length > 0) && (
         <KanbanBoard
           columns={columns}
           onStatusChange={handleStatusChange}

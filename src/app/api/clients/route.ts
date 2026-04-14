@@ -18,7 +18,7 @@ export async function GET(req: Request) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { contactPerson: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search } },
+        { tags: { has: search } },
       ];
     }
 

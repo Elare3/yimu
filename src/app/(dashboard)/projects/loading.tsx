@@ -1,5 +1,5 @@
-import { SkeletonKanban } from '@/components/ui/Skeleton';
+import PageShimmer from '@/components/ui/PageShimmer';
 
 export default function ProjectsLoading() {
-  return <SkeletonKanban />;
+  return <PageShimmer />;
 }

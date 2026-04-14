@@ -30,21 +30,18 @@ export default function FinancePage() {
   const [viewMode, setViewMode] = useState<'list' | 'project' | 'week'>('list');
   const now = new Date();
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-  const { transactions, isLoading } = useTransactions(typeFilter || undefined, month || undefined);
+  const { transactions, isLoading, mutate: listMutate } = useTransactions(typeFilter || undefined, month || undefined);
   const { summary, isLoading: summaryLoading, mutate: summaryMutate } = useSummary(month || undefined);
-  const { mutate: listMutate } = useTransactions(typeFilter || undefined, month || undefined);
 
   // 按项目视图数据
   const { data: projectData, isLoading: projectLoading } = useSWR(
-    viewMode === 'project' ? `/api/transactions/by-project?month=${month}` : null,
-    (url: string) => fetch(url).then(r => r.json())
+    viewMode === 'project' ? `/api/transactions/by-project?month=${month}` : null
   );
   const projectGroups = projectData?.data?.projects || [];
 
   // 按周视图数据
   const { data: weekData, isLoading: weekLoading } = useSWR(
-    viewMode === 'week' ? `/api/transactions/by-week?month=${month}` : null,
-    (url: string) => fetch(url).then(r => r.json())
+    viewMode === 'week' ? `/api/transactions/by-week?month=${month}` : null
   );
   const weekGroups = weekData?.data?.weeks || [];
 
@@ -178,7 +175,7 @@ export default function FinancePage() {
       {/* ===== 明细视图 ===== */}
       {viewMode === 'list' && (
         <>
-          {isLoading && <Loading />}
+          {isLoading && transactions.length === 0 && <Loading />}
 
           {!isLoading && transactions.length === 0 && (
             <div className="text-center py-16 text-brown-300">
@@ -245,7 +242,7 @@ export default function FinancePage() {
       {/* ===== 按项目视图 ===== */}
       {viewMode === 'project' && (
         <>
-          {projectLoading && <Loading />}
+          {projectLoading && projectGroups.length === 0 && <Loading />}
 
           {!projectLoading && projectGroups.length === 0 && (
             <div className="text-center py-16 text-brown-300">
@@ -367,7 +364,7 @@ export default function FinancePage() {
       {/* ===== 按周视图 ===== */}
       {viewMode === 'week' && (
         <>
-          {weekLoading && <Loading />}
+          {weekLoading && weekGroups.length === 0 && <Loading />}
 
           {!weekLoading && weekGroups.length === 0 && (
             <div className="text-center py-16 text-brown-300">

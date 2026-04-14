@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { useState, useTransition, useCallback, memo } from 'react';
+import { preloadRoute } from '@/lib/route-preload';
 
 const BUSINESS_TYPE_LABELS: Record<string, string> = {
   design: '设计师',
@@ -138,6 +139,7 @@ function SidebarInner() {
               key={item.href}
               href={item.href}
               prefetch={true}
+              onMouseEnter={() => preloadRoute(item.href)}
               onClick={(e) => {
                 // 阻止默认导航，改为 transition 导航
                 // 这样侧边栏高亮会立即切换，页面内容在后台加载

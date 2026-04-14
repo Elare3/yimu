@@ -20,9 +20,6 @@ const Tooltip = dynamic(() => import('recharts').then(m => m.Tooltip), { ssr: fa
 const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
 const Legend = dynamic(() => import('recharts').then(m => m.Legend), { ssr: false });
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
-const dashboardSwrOptions = { revalidateOnFocus: true, revalidateOnMount: true };
-
 type AlertItem = {
   id: string;
   type: string;
@@ -33,9 +30,8 @@ type AlertItem = {
 };
 
 function ProactiveAlerts() {
-  const { data } = useSWR('/api/dashboard/alerts', fetcher, {
+  const { data } = useSWR('/api/dashboard/alerts', {
     refreshInterval: 120_000,
-    ...dashboardSwrOptions,
   });
 
   const alerts: AlertItem[] = data?.data?.alerts || [];
@@ -70,10 +66,10 @@ function ProactiveAlerts() {
 }
 
 export default function DashboardPage() {
-  const { data, isLoading } = useSWR('/api/dashboard', fetcher, dashboardSwrOptions);
+  const { data, isLoading, isValidating } = useSWR('/api/dashboard');
 
-  // 骨架屏替代全白 Loading 旋转
-  if (isLoading) return <SkeletonDashboard />;
+  // 仅首次加载（无缓存）时显示骨架屏，有缓存时直接渲染
+  if (isLoading && !data) return <SkeletonDashboard />;
 
   const dashboard = data?.data;
   if (!dashboard) {
@@ -130,7 +126,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isValidating ? 'opacity-[0.97] transition-opacity duration-300' : ''}`}>
       {/* 新用户引导向导 */}
       <OnboardingWizard />
 

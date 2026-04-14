@@ -1,5 +1,5 @@
-import { SkeletonDashboard } from '@/components/ui/Skeleton';
+import PageShimmer from '@/components/ui/PageShimmer';
 
 export default function DashboardLoading() {
-  return <SkeletonDashboard />;
+  return <PageShimmer />;
 }

@@ -29,28 +29,4 @@ function Loading({ size = 'md', className = '' }: LoadingProps) {
   );
 }
 
-/** Full-page overlay with centered spinner and optional message. */
-function LoadingOverlay({ message }: { message?: string }) {
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-cream-50/80 backdrop-blur-[2px]">
-      <Loading size="lg" />
-      {message && (
-        <p className="mt-4 text-sm text-brown-500">{message}</p>
-      )}
-    </div>
-  );
-}
-
-/** Inline loading placeholder for sections within a page. */
-function LoadingSection({ message }: { message?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-12">
-      <Loading size="md" />
-      {message && (
-        <p className="mt-3 text-sm text-brown-300">{message}</p>
-      )}
-    </div>
-  );
-}
-
-export { Loading, LoadingOverlay, LoadingSection, type LoadingProps, type SpinnerSize };
+export { Loading, type LoadingProps, type SpinnerSize };

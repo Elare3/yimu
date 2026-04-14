@@ -179,7 +179,7 @@ function StatMini({ label, value, color }: { label: string; value: string; color
 }
 
 /* ── 概览 Tab ── */
-function OverviewTab({ client, router }: { client: Record<string, unknown>; stats: Record<string, unknown>; router: ReturnType<typeof useRouter> }) {
+function OverviewTab({ client, router }: { client: Record<string, unknown>; router: ReturnType<typeof useRouter> }) {
   const projects = (client.projects || []) as { id: string; name: string; status: string; totalAmount: number; updatedAt: string }[];
   const quotes = (client.quotes || []) as { id: string; title: string; total: number; status: string; createdAt: string }[];
   const paymentNodes = (client.paymentNodes || []) as { id: string; name: string; amount: number; dueDate: string; status: string; project?: { id: string; name: string } }[];

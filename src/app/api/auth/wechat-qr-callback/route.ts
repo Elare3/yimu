@@ -7,8 +7,14 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code');
+  const state = searchParams.get('state');
 
   if (!code) {
+    return NextResponse.redirect(new URL('/login?error=wechat_no_code', req.url));
+  }
+
+  // state 参数防 CSRF：必须以 yimu_ 开头
+  if (!state || !state.startsWith('yimu_')) {
     return NextResponse.redirect(new URL('/login?error=wechat_no_code', req.url));
   }
 

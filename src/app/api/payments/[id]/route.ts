@@ -16,8 +16,16 @@ export async function PUT(
 
     const updateData: Record<string, unknown> = {};
     if (body.name !== undefined) updateData.name = body.name;
-    if (body.amount !== undefined) updateData.amount = parseFloat(body.amount);
-    if (body.dueDate !== undefined) updateData.dueDate = new Date(body.dueDate);
+    if (body.amount !== undefined) {
+      const amount = parseFloat(body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return errorResponse('金额无效', 400);
+      updateData.amount = amount;
+    }
+    if (body.dueDate !== undefined) {
+      const date = new Date(body.dueDate);
+      if (isNaN(date.getTime())) return errorResponse('日期无效', 400);
+      updateData.dueDate = date;
+    }
     if (body.notes !== undefined) updateData.notes = body.notes;
 
     const node = await prisma.paymentNode.update({

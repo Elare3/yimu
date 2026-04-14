@@ -32,7 +32,6 @@ export async function POST(
       sentAt: new Date(),
       channel: result.channel,
       content: result.content,
-      level: result.level,
       aiGenerated: true,
     };
 

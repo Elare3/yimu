@@ -188,7 +188,7 @@ export function extractKeywords(text: string): string[] {
   // 提取数量词（如"5页""3套"）
   const quantities = cleaned.match(/\d+[页套张条个版稿]/g) || [];
 
-  return [...new Set([...found, ...quantities])].slice(0, 10);
+  return Array.from(new Set([...found, ...quantities])).slice(0, 10);
 }
 
 // ═══ 意图哈希（用于缓存命中） ═══

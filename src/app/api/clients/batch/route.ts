@@ -55,18 +55,19 @@ export async function POST(req: Request) {
       }
       case 'tag': {
         if (!value) return errorResponse('请指定标签');
-        let affected = 0;
-        for (const id of ids) {
-          const client = await prisma.client.findUnique({ where: { id }, select: { tags: true } });
-          if (client && !client.tags.includes(value)) {
-            await prisma.client.update({
-              where: { id },
-              data: { tags: { push: value } },
-            });
-            affected++;
-          }
+        // 只更新尚未包含该标签的客户，避免 N+1
+        const clientsToTag = await prisma.client.findMany({
+          where: { id: { in: ids }, userId, NOT: { tags: { has: value } } },
+          select: { id: true },
+        });
+        if (clientsToTag.length > 0) {
+          await Promise.all(
+            clientsToTag.map(c =>
+              prisma.client.update({ where: { id: c.id }, data: { tags: { push: value } } })
+            )
+          );
         }
-        result.affected = affected;
+        result.affected = clientsToTag.length;
         break;
       }
       default:

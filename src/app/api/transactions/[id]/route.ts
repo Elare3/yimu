@@ -43,8 +43,16 @@ export async function PUT(
     for (const f of fields) {
       if (body[f] !== undefined) updateData[f] = body[f];
     }
-    if (body.amount !== undefined) updateData.amount = parseFloat(body.amount);
-    if (body.date !== undefined) updateData.date = new Date(body.date);
+    if (body.amount !== undefined) {
+      const amount = parseFloat(body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return errorResponse('金额无效', 400);
+      updateData.amount = amount;
+    }
+    if (body.date !== undefined) {
+      const date = new Date(body.date);
+      if (isNaN(date.getTime())) return errorResponse('日期无效', 400);
+      updateData.date = date;
+    }
     if (body.projectId !== undefined) updateData.projectId = body.projectId || null;
     if (body.clientId !== undefined) updateData.clientId = body.clientId || null;
 
