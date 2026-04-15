@@ -12,7 +12,9 @@ datasource db {
 // ── 用户 ──
 model User {
   id            String        @id @default(auto()) @map("_id") @db.ObjectId
-  phone         String?       @unique  // 可选（微信登录可能没有手机号）
+  phone         String        // 存储密文（AES-GCM，随机 IV），不建索引
+  phoneHash     String?       @unique // HMAC-SHA256(phone)，登录/绑定/唯一性查询用
+  passwordHash  String?       // 可选：通过验证码登录时可不设置
   name          String        @default("")
   companyName   String        @default("")
   avatarUrl     String        @default("")
@@ -20,13 +22,8 @@ model User {
   entityType    String        @default("freelance") // individual|sole_proprietor|micro_company|freelance
   plan          String        @default("free") // free|pro|premium
   planExpiresAt DateTime?
-  needsOnboarding Boolean     @default(false) // 微信首次登录需完成引导设置
   privacyMode   String        @default("standard") // standard|strict
   settings      UserSettings?
-
-  // 微信登录字段
-  wechatOpenId  String?       @unique  // 微信OpenID（同一应用唯一）
-  wechatUnionId String?       @unique  // 微信UnionID（跨应用唯一，开放平台才有）
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -320,6 +317,29 @@ model Feedback {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+// ── AI 审计日志（五层防御 · 落库） ──
+model AIAuditLog {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  timestamp         DateTime
+  userId            String   @db.ObjectId
+  task              String
+  inputHash         String   // sha256 前 16 位，不存原文
+  inputLength       Int
+  threats           String[] @default([]) // "critical:role_hijack" 这类串
+  sensitiveRedacted String[] @default([])
+  outputValid       Boolean
+  outputIssues      String[] @default([])
+  model             String
+  latencyMs         Int
+  tokenPrompt       Int?
+  tokenCompletion   Int?
+  tokenTotal        Int?
+  createdAt         DateTime @default(now())
+
+  @@index([userId, timestamp])
+  @@index([task, timestamp])
 }
 
 // ── 活动日志 ──

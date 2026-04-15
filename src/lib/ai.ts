@@ -3,17 +3,25 @@
 // 支持：任务路由 / 快速思考(thinking_budget) / JSON解析 / 重试降级 / 超时控制
 // ============================================================
 
-// 任务→模型路由
+// 主/轻模型从环境变量读取，未配置时兜底到 qwen3.5-plus
+const PRIMARY_MODEL = process.env.PRIMARY_MODEL || 'qwen3.5-plus';
+const LIGHT_MODEL = process.env.LIGHT_MODEL || 'qwen3.5-plus';
+
+// 任务→模型路由：复杂推理任务走 PRIMARY，结构化/解析任务走 LIGHT
 export const TASK_MODEL_MAP: Record<string, string> = {
-  'quote.generate':        'qwen3.5-plus',    // 报价生成（需要商务理解）
-  'quote.adjust':          'qwen3.5-plus',    // 报价调整
-  'transaction.parse':     'qwen3.5-plus',    // 记账解析（需要中文NLP）
-  'transaction.classify':  'qwen3.5-plus',    // 简单分类
-  'reminder.generate':     'qwen3.5-plus',    // 催款文案（需要商务写作）
-  'insight.generate':      'qwen3.5-plus',    // 经营洞察
-  'contract.generate':     'qwen3.5-plus',    // 合同条款生成
-  'fallback':              'qwen3.5-plus',    // 降级备选
+  'quote.generate':        PRIMARY_MODEL,    // 报价生成（需要商务理解）
+  'quote.adjust':          LIGHT_MODEL,      // 报价调整（改动已有结构）
+  'transaction.parse':     LIGHT_MODEL,      // 记账解析（中文 NLP）
+  'transaction.classify':  LIGHT_MODEL,      // 简单分类
+  'reminder.generate':     PRIMARY_MODEL,    // 催款文案（需要商务写作）
+  'insight.generate':      PRIMARY_MODEL,    // 经营洞察（深度推理）
+  'contract.generate':     PRIMARY_MODEL,    // 合同条款生成
+  'fallback':              LIGHT_MODEL,      // 降级备选
 };
+
+export function getModelForTask(task: string): string {
+  return TASK_MODEL_MAP[task] || LIGHT_MODEL;
+}
 
 /**
  * 任务→思考预算路由（thinking_budget）
@@ -73,7 +81,7 @@ export async function callAI(options: AICallOptions) {
     throw new Error('DASHSCOPE_API_KEY 环境变量未配置');
   }
 
-  const model = TASK_MODEL_MAP[task] || 'qwen3.5-plus';
+  const model = getModelForTask(task);
 
   // 思考预算：优先使用调用方指定的，否则使用任务默认值
   const budget = thinkingBudget ?? TASK_THINKING_BUDGET[task] ?? 256;

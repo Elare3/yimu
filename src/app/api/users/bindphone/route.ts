@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
+import { hmacPhone } from '@/lib/encryption';
 
 // POST /api/users/bindphone - 绑定手机号
 export async function POST(req: Request) {
@@ -17,9 +18,9 @@ export async function POST(req: Request) {
       return errorResponse('手机号格式不正确');
     }
 
-    // 开发环境：固定验证码 123456
-    if (process.env.NODE_ENV === 'development') {
-      if (code !== '123456') {
+    // 固定验证码 051029 仅在非生产环境生效
+    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_TEST_CODE === 'true') {
+      if (code !== '051029') {
         return errorResponse('验证码错误');
       }
     } else {
@@ -27,8 +28,8 @@ export async function POST(req: Request) {
       return errorResponse('短信验证服务未配置');
     }
 
-    // 检查手机号是否已被其他用户使用
-    const existing = await prisma.user.findUnique({ where: { phone } });
+    // 检查手机号是否已被其他用户使用（通过 HMAC 索引查询）
+    const existing = await prisma.user.findUnique({ where: { phoneHash: hmacPhone(phone) } });
     if (existing && existing.id !== userId) {
       return errorResponse('该手机号已绑定其他账户');
     }

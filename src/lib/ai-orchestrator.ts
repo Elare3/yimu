@@ -4,7 +4,7 @@
 // ============================================================
 
 import { prisma } from './prisma';
-import { callAI, validateQuoteResponse, validateTransactionResponse } from './ai';
+import { callAI, getModelForTask, validateQuoteResponse, validateTransactionResponse } from './ai';
 import { secureCallAI, validateAIOutput, logAIAudit, hashInput } from './security';
 import {
   TRANSACTION_INFERENCE_RULES,
@@ -471,7 +471,7 @@ export async function smartClassifyTransaction(params: {
     sensitiveRedacted: [],
     outputValid: validation.valid,
     outputIssues: validation.issues,
-    model: 'deepseek-chat',
+    model: getModelForTask('transaction.classify'),
     latencyMs: Date.now() - startTime,
   });
 
@@ -534,7 +534,7 @@ export async function smartBatchClassify(records: { id: string; type: string; de
       sensitiveRedacted: [],
       outputValid: validation.valid,
       outputIssues: validation.issues,
-      model: 'deepseek-chat',
+      model: getModelForTask('transaction.classify'),
       latencyMs: Date.now() - batchStartTime,
     });
 

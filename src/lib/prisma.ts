@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { encrypt, decrypt } from './encryption';
+import { encrypt, decrypt, hmacPhone } from './encryption';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
@@ -26,6 +26,10 @@ function createPrismaClient(): PrismaClient {
     if (fields && ['create', 'update', 'upsert', 'createMany'].includes(params.action)) {
       const encryptData = (data: Record<string, unknown> | undefined) => {
         if (!data) return;
+        // User 写入 phone 时，同步生成 phoneHash 供登录/唯一性查询使用
+        if (model === 'User' && typeof data.phone === 'string' && data.phone && !(data.phone as string).startsWith('enc:')) {
+          data.phoneHash = hmacPhone(data.phone as string);
+        }
         for (const field of fields) {
           if (typeof data[field] === 'string' && data[field]) {
             data[field] = encrypt(data[field] as string);

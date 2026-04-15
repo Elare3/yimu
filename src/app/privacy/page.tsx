@@ -99,7 +99,7 @@ export default function PrivacyPolicyPage() {
             <p>一木使用以下第三方服务：</p>
             <ul className="list-disc pl-5 space-y-1 mt-2">
               <li><strong>阿里云百炼（通义千问）</strong>：小木文本生成服务。仅接收语义意图参数，不接收您的真实业务数据。</li>
-              <li><strong>微信开放平台</strong>：仅在您选择微信登录时使用，获取 OpenID 和基本资料用于身份验证。</li>
+              <li><strong>短信验证码服务</strong>：仅在您使用手机号登录或绑定手机号时向您下发一次性验证码，用于身份验证。</li>
             </ul>
             <p className="mt-2">我们不会向任何第三方出售、出租或以其他方式分享您的个人数据。</p>
           </section>

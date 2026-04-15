@@ -178,23 +178,21 @@ DATABASE_URL=mongodb://localhost:27017/yimu_db
 NEXTAUTH_SECRET=your-random-secret-key
 NEXTAUTH_URL=http://localhost:3001
 
-# AI 引擎（阿里云百炼）
+# AI 引擎（阿里云百炼 DashScope）
 DASHSCOPE_API_KEY=your-dashscope-api-key
-PRIMARY_MODEL=qwen-max
-LIGHT_MODEL=deepseek-chat
-
-# 备用：DeepSeek 直连
-DEEPSEEK_API_KEY=your-deepseek-api-key
-
-# 微信开放平台（扫码登录）
-WECHAT_APP_ID=wx_your_app_id
-WECHAT_APP_SECRET=your_app_secret
+# 主模型：用于复杂推理任务（报价/催款/经营洞察/合同）
+PRIMARY_MODEL=qwen3.6-plus
+# 轻模型：用于解析/分类/调整等结构化任务
+LIGHT_MODEL=qwen3.5-plus
 
 # 敏感字段加密 (AES-256-GCM)
 ENCRYPTION_KEY=your-64-char-hex-key
+
+# 开发/测试环境固定验证码 051029
+ENABLE_TEST_CODE=true
 ```
 
-> 开发模式下，短信验证码固定为 `123456`，无需真实短信服务。
+> 开发模式下，短信验证码固定为 `051029`，无需真实短信服务。
 
 ### 构建部署
 

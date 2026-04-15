@@ -4,7 +4,8 @@
 // ============================================================
 
 import * as crypto from 'crypto';
-import { callAI } from './ai';
+import { callAIWithFallback, getModelForTask } from './ai';
+import { prisma } from './prisma';
 
 // ============================================================
 // 第1层：输入清洗与验证（Input Sanitization）
@@ -318,12 +319,33 @@ interface AIAuditLog {
  * 记录AI调用审计日志
  */
 export async function logAIAudit(log: AIAuditLog): Promise<void> {
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV !== 'production') {
     console.log('[AI_AUDIT]', JSON.stringify(log, null, 2));
-    return;
   }
-  // 生产环境写入数据库
-  // await prisma.aiAuditLog.create({ data: log });
+  // 生产 + 非生产环境均落库，用于安全追溯与合规审计
+  try {
+    await prisma.aIAuditLog.create({
+      data: {
+        timestamp: new Date(log.timestamp),
+        userId: log.userId,
+        task: log.task,
+        inputHash: log.inputHash,
+        inputLength: log.inputLength,
+        threats: log.threats,
+        sensitiveRedacted: log.sensitiveRedacted,
+        outputValid: log.outputValid,
+        outputIssues: log.outputIssues,
+        model: log.model,
+        latencyMs: log.latencyMs,
+        tokenPrompt: log.tokenUsage?.prompt,
+        tokenCompletion: log.tokenUsage?.completion,
+        tokenTotal: log.tokenUsage?.total,
+      },
+    });
+  } catch (e) {
+    // 审计写入失败不得阻塞业务流程
+    console.error('[AI_AUDIT] persist failed:', e instanceof Error ? e.message : e);
+  }
 }
 
 /**
@@ -393,7 +415,7 @@ export async function secureCallAI(params: {
     const timeout = AI_SECURITY_CONFIG.timeout[task] ?? AI_SECURITY_CONFIG.timeout.default;
 
     const result = await Promise.race([
-      callAI({
+      callAIWithFallback({
         task,
         systemPrompt,
         userPrompt,
@@ -419,7 +441,7 @@ export async function secureCallAI(params: {
       sensitiveRedacted: sanitizeResult.sensitiveRedacted.map(s => s.name),
       outputValid: validation.valid,
       outputIssues: validation.issues,
-      model: task === 'transaction.classify' ? 'deepseek-chat' : 'qwen-max',
+      model: getModelForTask(task),
       latencyMs: Date.now() - startTime,
     });
 
@@ -440,7 +462,7 @@ export async function secureCallAI(params: {
       sensitiveRedacted: [],
       outputValid: false,
       outputIssues: [error.message === 'AI_TIMEOUT' ? 'timeout' : 'api_error'],
-      model: 'N/A',
+      model: getModelForTask(task),
       latencyMs: Date.now() - startTime,
     });
 

@@ -1,22 +1,28 @@
 import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
 
-// ── 简单内存速率限制器（每用户每分钟60次） ──
-const RATE_LIMIT_WINDOW = 60_000; // 1 minute
+// ── 简单内存速率限制器 ──
+// 业务 API：每用户每分钟 60 次
+// 登录/注册：每 IP 每 10 分钟 10 次（防验证码/密码爆破）
+const RATE_LIMIT_WINDOW = 60_000;
 const RATE_LIMIT_MAX = 60;
+const LOGIN_WINDOW = 10 * 60_000;
+const LOGIN_MAX = 10;
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-function checkRateLimit(key: string): boolean {
+function checkLimit(key: string, windowMs: number, max: number): boolean {
   const now = Date.now();
   const entry = rateLimitMap.get(key);
-
   if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
     return true;
   }
-
   entry.count++;
-  return entry.count <= RATE_LIMIT_MAX;
+  return entry.count <= max;
+}
+
+function checkRateLimit(key: string): boolean {
+  return checkLimit(key, RATE_LIMIT_WINDOW, RATE_LIMIT_MAX);
 }
 
 // 定期清理过期条目（防内存泄漏）
@@ -31,14 +37,33 @@ if (typeof globalThis !== 'undefined') {
   }, 60_000);
 }
 
+function clientIp(req: Request): string {
+  const xff = req.headers.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0].trim();
+  return req.headers.get('x-real-ip') || 'unknown';
+}
+
 export default withAuth(
   async function middleware(req) {
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
+    // ── 登录爆破防护：每 IP 每 10 分钟 10 次 ──
+    // NextAuth 的凭证登录最终都会走 /api/auth/callback/{phone|password}
+    if (pathname.startsWith('/api/auth/callback/')) {
+      const ip = clientIp(req);
+      if (!checkLimit(`login:${ip}`, LOGIN_WINDOW, LOGIN_MAX)) {
+        return new NextResponse(
+          JSON.stringify({ success: false, error: '登录尝试过于频繁，请 10 分钟后再试' }),
+          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '600' } }
+        );
+      }
+      return NextResponse.next();
+    }
+
     // ── API速率限制：每用户每分钟60次 ──
     if (pathname.startsWith('/api/')) {
-      const userId = (token?.id as string) || req.headers.get('x-forwarded-for') || 'anonymous';
+      const userId = (token?.id as string) || clientIp(req);
       if (!checkRateLimit(userId)) {
         return new NextResponse(
           JSON.stringify({ success: false, error: '请求过于频繁，请稍后再试' }),
@@ -47,28 +72,18 @@ export default withAuth(
       }
     }
 
-    // 已登录且需要引导设置 → 重定向到 /onboarding
-    if (
-      token?.needsOnboarding === true &&
-      !pathname.startsWith('/onboarding') &&
-      !pathname.startsWith('/api/')
-    ) {
-      return NextResponse.redirect(new URL('/onboarding', req.url));
-    }
-
-    // 已完成引导但访问 /onboarding → 重定向到 /dashboard
-    if (
-      token?.needsOnboarding !== true &&
-      pathname.startsWith('/onboarding')
-    ) {
-      return NextResponse.redirect(new URL('/dashboard', req.url));
-    }
-
     return NextResponse.next();
   },
   {
     pages: {
       signIn: '/login',
+    },
+    callbacks: {
+      // /api/auth/callback/* 无需已登录即可通过 middleware（否则登录请求会被重定向）
+      authorized: ({ req, token }) => {
+        if (req.nextUrl.pathname.startsWith('/api/auth/callback/')) return true;
+        return !!token;
+      },
     },
   }
 );
@@ -76,7 +91,6 @@ export default withAuth(
 export const config = {
   matcher: [
     '/dashboard/:path*',
-    '/onboarding/:path*',
     '/clients/:path*',
     '/projects/:path*',
     '/quotes/:path*',
@@ -91,5 +105,6 @@ export const config = {
     '/api/dashboard/:path*',
     '/api/notifications/:path*',
     '/api/users/:path*',
+    '/api/auth/callback/:path*',
   ],
 };

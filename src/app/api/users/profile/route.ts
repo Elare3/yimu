@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
+import { hmacPhone } from '@/lib/encryption';
 
 // GET /api/users/profile - 获取用户资料
 export async function GET() {
@@ -19,16 +20,16 @@ export async function GET() {
         entityType: true,
         plan: true,
         planExpiresAt: true,
-        needsOnboarding: true,
         privacyMode: true,
-        wechatOpenId: true,
+        passwordHash: true,
         settings: true,
         createdAt: true,
       },
     });
 
     if (!user) return errorResponse('用户不存在', 404);
-    return successResponse(user);
+    const { passwordHash, ...rest } = user;
+    return successResponse({ ...rest, hasPassword: !!passwordHash });
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') {
       return errorResponse('请先登录', 401);
@@ -68,8 +69,8 @@ export async function PUT(req: Request) {
     }
     if (phone !== undefined && phone !== '') {
       if (!/^1[3-9]\d{9}$/.test(phone)) return errorResponse('手机号格式不正确');
-      // 检查手机号是否已被其他用户使用
-      const existing = await prisma.user.findUnique({ where: { phone } });
+      // 检查手机号是否已被其他用户使用（通过 HMAC 索引查询）
+      const existing = await prisma.user.findUnique({ where: { phoneHash: hmacPhone(phone) } });
       if (existing && existing.id !== userId) return errorResponse('该手机号已绑定其他账户');
       updateData.phone = phone;
     }
@@ -89,7 +90,6 @@ export async function PUT(req: Request) {
         businessType: true,
         entityType: true,
         plan: true,
-        needsOnboarding: true,
         settings: true,
       },
     });

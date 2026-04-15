@@ -7,6 +7,29 @@ import path from 'path';
 const MAX_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
+/**
+ * 通过文件 magic bytes 判断真实图片类型，不信任客户端 Content-Type / 文件名。
+ * 返回规范化的扩展名，未识别返回 null。
+ */
+function detectImageKind(buf: Buffer): 'jpg' | 'png' | 'webp' | 'gif' | null {
+  if (buf.length < 12) return null;
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+    buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a
+  ) return 'png';
+  // GIF: "GIF87a" or "GIF89a"
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'gif';
+  // WebP: "RIFF"...."WEBP"
+  if (
+    buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+    buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
+  ) return 'webp';
+  return null;
+}
+
 // POST /api/users/avatar — 上传头像
 export async function POST(req: Request) {
   try {

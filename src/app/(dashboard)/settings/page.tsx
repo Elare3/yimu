@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSession, signOut, signIn } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import useSWR from 'swr';
 import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
@@ -66,9 +66,8 @@ interface UserProfile {
   businessType: string;
   entityType: string;
   plan: string;
-  needsOnboarding: boolean;
   privacyMode: string;
-  wechatOpenId: string | null;
+  hasPassword: boolean;
   settings: {
     currency: string;
     taxRate: number;
@@ -131,6 +130,13 @@ export default function SettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // 密码设置
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [pwdLoading, setPwdLoading] = useState(false);
 
   // 反馈
   const [feedbackType, setFeedbackType] = useState('experience');
@@ -234,6 +240,28 @@ export default function SettingsPage() {
     finally { setBindPhoneLoading(false); }
   };
 
+  const handleSavePassword = async () => {
+    if (!newPwd || newPwd.length < 6) { toast.error('新密码至少 6 位'); return; }
+    if (newPwd !== confirmPwd) { toast.error('两次输入的密码不一致'); return; }
+    if (hasPassword && !currentPwd) { toast.error('请输入当前密码'); return; }
+    setPwdLoading(true);
+    try {
+      const res = await fetch('/api/users/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
+      });
+      const r = await res.json();
+      if (r.success) {
+        toast.success(hasPassword ? '密码已修改' : '密码已设置');
+        setShowPasswordForm(false);
+        setCurrentPwd(''); setNewPwd(''); setConfirmPwd('');
+        mutate();
+      } else toast.error(r.error || '操作失败');
+    } catch { toast.error('网络错误'); }
+    finally { setPwdLoading(false); }
+  };
+
   const startBindCountdown = () => {
     setBindCountdown(60);
     const timer = setInterval(() => {
@@ -295,7 +323,7 @@ export default function SettingsPage() {
   };
 
   const maskedPhone = profile?.phone ? `${profile.phone.slice(0, 3)}****${profile.phone.slice(7)}` : '';
-  const hasWechat = !!profile?.wechatOpenId;
+  const hasPassword = !!profile?.hasPassword;
   const hasPhone = !!profile?.phone;
   const userName = profile?.name || session?.user?.name || '用户';
   const planLabel = { free: '免费版', pro: '专业版', premium: '旗舰版' }[profile?.plan || 'free'] || '免费版';
@@ -380,12 +408,6 @@ export default function SettingsPage() {
               退出
             </button>
             <div className="flex items-center gap-3 text-xs">
-              {hasWechat && (
-                <span className="flex items-center gap-1 text-green-600">
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.534c0 2.382 1.274 4.52 3.267 5.936L2.43 17.96l2.762-1.392a9.95 9.95 0 003.499.632c.303 0 .601-.015.898-.042a5.778 5.778 0 01-.233-1.607c0-3.647 3.473-6.608 7.752-6.608.39 0 .775.027 1.152.076C17.513 5.03 13.485 2.188 8.691 2.188z" /><path d="M24 15.55c0-3.297-3.473-5.972-7.752-5.972S8.496 12.253 8.496 15.55c0 3.299 3.473 5.973 7.752 5.973.85 0 1.67-.116 2.44-.33l2.174 1.1-.607-2.005C22.84 19.33 24 17.563 24 15.55z" /></svg>
-                  微信已绑
-                </span>
-              )}
               {hasPhone && (
                 <span className="text-brown-400 font-mono">{maskedPhone}</span>
               )}
@@ -456,30 +478,7 @@ export default function SettingsPage() {
               </Section>
 
               {/* 登录方式 */}
-              <Section title="登录方式" desc="管理你的手机号和微信绑定">
-                {/* 微信 */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-[10px] bg-[#07C160]/10 flex items-center justify-center">
-                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#07C160">
-                        <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.534c0 2.382 1.274 4.52 3.267 5.936L2.43 17.96l2.762-1.392a9.95 9.95 0 003.499.632c.303 0 .601-.015.898-.042a5.778 5.778 0 01-.233-1.607c0-3.647 3.473-6.608 7.752-6.608.39 0 .775.027 1.152.076C17.513 5.03 13.485 2.188 8.691 2.188z" />
-                        <path d="M24 15.55c0-3.297-3.473-5.972-7.752-5.972S8.496 12.253 8.496 15.55c0 3.299 3.473 5.973 7.752 5.973.85 0 1.67-.116 2.44-.33l2.174 1.1-.607-2.005C22.84 19.33 24 17.563 24 15.55z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-brown-800">微信</p>
-                      <p className={`text-xs mt-0.5 ${hasWechat ? 'text-green-600' : 'text-brown-300'}`}>
-                        {hasWechat ? '已绑定' : '未绑定'}
-                      </p>
-                    </div>
-                  </div>
-                  {!hasWechat && (
-                    <Button size="sm" variant="ghost" onClick={() => signIn('wechat', { callbackUrl: '/settings' })}>绑定</Button>
-                  )}
-                </div>
-
-                <div className="h-px bg-cream-100" />
-
+              <Section title="登录方式" desc="管理你的手机号和登录密码">
                 {/* 手机号 */}
                 <div className="py-3">
                   <div className="flex items-center justify-between">
@@ -517,10 +516,64 @@ export default function SettingsPage() {
                           {bindCountdown > 0 ? `${bindCountdown}s` : '发送验证码'}
                         </button>
                       </div>
-                      {process.env.NODE_ENV === 'development' && <p className="text-brown-300 text-[11px]">开发模式验证码：123456</p>}
+                      {process.env.NODE_ENV === 'development' && <p className="text-brown-300 text-[11px]">开发模式验证码：051029</p>}
                       <div className="flex gap-2">
                         <Button size="sm" onClick={handleBindPhone} loading={bindPhoneLoading}>确认绑定</Button>
                         <Button size="sm" variant="ghost" onClick={() => { setShowBindPhone(false); setBindPhone(''); setBindCode(''); }}>取消</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="h-px bg-cream-100" />
+
+                {/* 登录密码 */}
+                <div className="py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-[10px] bg-caramel/8 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-caramel" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-brown-800">登录密码</p>
+                        <p className={`text-xs mt-0.5 ${hasPassword ? 'text-green-600' : 'text-brown-300'}`}>
+                          {hasPassword ? '已设置' : '未设置，当前仅能通过验证码登录'}
+                        </p>
+                      </div>
+                    </div>
+                    {!showPasswordForm && (
+                      <Button size="sm" variant="ghost" onClick={() => setShowPasswordForm(true)}>
+                        {hasPassword ? '修改' : '设置'}
+                      </Button>
+                    )}
+                  </div>
+
+                  {showPasswordForm && (
+                    <div className="mt-3 p-4 bg-cream-50 rounded-[14px] space-y-3">
+                      {hasPassword && (
+                        <input type="password" value={currentPwd}
+                          onChange={(e) => setCurrentPwd(e.target.value)}
+                          placeholder="当前密码"
+                          className="w-full px-3 py-2.5 rounded-[10px] border border-cream-300 text-sm text-brown-800 outline-none focus:border-caramel" />
+                      )}
+                      <input type="password" value={newPwd}
+                        onChange={(e) => setNewPwd(e.target.value)}
+                        placeholder="新密码（6-64 位）"
+                        className="w-full px-3 py-2.5 rounded-[10px] border border-cream-300 text-sm text-brown-800 outline-none focus:border-caramel" />
+                      <input type="password" value={confirmPwd}
+                        onChange={(e) => setConfirmPwd(e.target.value)}
+                        placeholder="确认新密码"
+                        className="w-full px-3 py-2.5 rounded-[10px] border border-cream-300 text-sm text-brown-800 outline-none focus:border-caramel" />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleSavePassword} loading={pwdLoading}>
+                          {hasPassword ? '确认修改' : '确认设置'}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => {
+                          setShowPasswordForm(false);
+                          setCurrentPwd(''); setNewPwd(''); setConfirmPwd('');
+                        }}>取消</Button>
                       </div>
                     </div>
                   )}

@@ -71,3 +71,15 @@ export function decrypt(ciphertext: string): string {
 export function isEncrypted(value: string): boolean {
   return typeof value === 'string' && value.startsWith(PREFIX);
 }
+
+/**
+ * Deterministic HMAC-SHA256 hash of a phone number, used as a lookup index
+ * alongside the encrypted (random-IV) ciphertext. Keyed with ENCRYPTION_KEY
+ * so the hash is not a rainbow-table lookup for an attacker who only gets
+ * the DB dump.
+ */
+export function hmacPhone(phone: string): string {
+  if (!phone) return '';
+  const key = getKey();
+  return crypto.createHmac('sha256', key).update(phone).digest('hex');
+}

@@ -7,7 +7,6 @@ declare module 'next-auth' {
       name: string;
       phone?: string;
       avatarUrl: string;
-      needsOnboarding?: boolean;
     };
   }
 
@@ -24,6 +23,5 @@ declare module 'next-auth/jwt' {
     id: string;
     phone: string;
     avatarUrl?: string;
-    needsOnboarding?: boolean;
   }
 }
