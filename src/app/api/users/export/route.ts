@@ -33,6 +33,24 @@ export async function GET() {
       paymentNodes,
     };
 
+    // 审计：全量数据导出落 ActivityLog
+    prisma.activityLog.create({
+      data: {
+        userId,
+        entityType: 'export',
+        entityId: userId,
+        action: 'full_export',
+        description: '导出全部账户数据',
+        metadata: JSON.stringify({
+          clients: clients.length,
+          projects: projects.length,
+          quotes: quotes.length,
+          transactions: transactions.length,
+          paymentNodes: paymentNodes.length,
+        }),
+      },
+    }).catch((err) => console.error('[users/export] audit failed:', err));
+
     return new Response(JSON.stringify(exportData, null, 2), {
       status: 200,
       headers: {

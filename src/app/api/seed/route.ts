@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getCurrentUserId } from '@/lib/session';
+import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
 
 // ── 辅助函数 ──
@@ -102,13 +102,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 优先用当前登录用户，未登录则取数据库第一个用户
-    let userId = await getCurrentUserId();
-    if (!userId) {
-      const firstUser = await prisma.user.findFirst({ select: { id: true } });
-      if (!firstUser) return errorResponse('数据库中没有用户，请先注册或登录', 400);
-      userId = firstUser.id;
-    }
+    // 必须登录；移除"第一个用户"降级，防止开发环境脏数据被任意灌入
+    const userId = await requireUserId();
 
     const body = await req.json().catch(() => ({}));
     const clear = body.clear === true;
@@ -523,6 +518,9 @@ export async function POST(req: Request) {
     });
 
   } catch (e) {
+    if (e instanceof Error && e.message === 'Unauthorized') {
+      return errorResponse('请先登录', 401);
+    }
     console.error('Seed error:', e);
     return errorResponse(`生成失败: ${e instanceof Error ? e.message : '未知错误'}`, 500);
   }

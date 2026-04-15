@@ -82,6 +82,18 @@ export async function GET(req: Request) {
       }
     }
 
+    // 审计：敏感数据导出落 ActivityLog
+    prisma.activityLog.create({
+      data: {
+        userId,
+        entityType: 'export',
+        entityId: userId,
+        action: 'data_exported',
+        description: `导出数据 (${type})`,
+        metadata: JSON.stringify({ type, format: 'csv' }),
+      },
+    }).catch((err) => console.error('[export] audit failed:', err));
+
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',

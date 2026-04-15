@@ -46,17 +46,21 @@ export async function POST(req: Request) {
       return errorResponse('图片大小不能超过 2MB');
     }
 
+    // 读入完整内容后按 magic bytes 真实嗅探，忽略客户端 Content-Type
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const realKind = detectImageKind(buffer);
+    if (!realKind) {
+      return errorResponse('文件内容不是合法的图片');
+    }
+
     // 生成安全文件名：userId + timestamp + ext（不使用用户提供的文件名）
-    const ext = file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1];
-    if (!/^[a-z]+$/.test(ext)) return errorResponse('不支持的图片格式');
-    const filename = `${userId}_${Date.now()}.${ext}`;
+    const filename = `${userId}_${Date.now()}.${realKind}`;
 
     // 确保目录存在
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
     await mkdir(uploadDir, { recursive: true });
 
     // 写入文件
-    const buffer = Buffer.from(await file.arrayBuffer());
     const filepath = path.join(uploadDir, filename);
     await writeFile(filepath, buffer);
 

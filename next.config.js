@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // 构建时只 Lint 生产源码，排除 __tests__ / scripts 等辅助目录
+  eslint: {
+    dirs: ['src/app', 'src/components', 'src/lib', 'src/hooks', 'src/stores', 'src/types', 'src/middleware.ts'],
+  },
   // 压缩响应
   compress: true,
   // 优化打包
