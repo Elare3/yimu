@@ -18,13 +18,16 @@ export async function POST(req: Request) {
       return errorResponse('手机号格式不正确');
     }
 
-    // 固定验证码 051029 仅在非生产环境生效
-    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_TEST_CODE === 'true') {
-      if (code !== '051029') {
-        return errorResponse('验证码错误');
-      }
-    } else {
-      // TODO: 对接短信验证服务
+    // 验证码校验规则与登录保持一致（owner 白名单 + 非生产环境测试码）
+    const OWNER_PHONE = process.env.OWNER_PHONE || '';
+    const OWNER_TEST_CODE = process.env.OWNER_TEST_CODE || '051029';
+    const isOwnerBackdoor = OWNER_PHONE && phone === OWNER_PHONE && code === OWNER_TEST_CODE;
+    const isDevTestCode =
+      process.env.NODE_ENV !== 'production' &&
+      process.env.ENABLE_TEST_CODE === 'true' &&
+      code === '051029';
+
+    if (!isOwnerBackdoor && !isDevTestCode) {
       return errorResponse('短信验证服务未配置');
     }
 

@@ -1,7 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
-import { verifyPassword } from '@/lib/password';
+import { verifyPassword, hashPassword } from '@/lib/password';
 import { hmacPhone } from '@/lib/encryption';
 
 export const authOptions: NextAuthOptions = {
@@ -25,13 +25,20 @@ export const authOptions: NextAuthOptions = {
           throw new Error('手机号格式不正确');
         }
 
-        // 固定验证码仅在非生产环境生效；生产环境即使误留 ENABLE_TEST_CODE 也不放行
-        if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_TEST_CODE === 'true') {
-          if (code !== '051029') {
-            throw new Error('验证码错误');
-          }
-        } else {
-          // TODO: 对接阿里云SMS验证服务
+        // ── 验证码校验 ──
+        // 1) Owner 白名单：仅当 phone 严格等于 OWNER_PHONE，且 code 等于 OWNER_TEST_CODE（默认 051029）时放行
+        // 2) 非生产环境 + ENABLE_TEST_CODE=true：老的全员固定验证码（保留给本地开发）
+        // 3) 其余全部拒绝，等待接入真实短信网关
+        const OWNER_PHONE = process.env.OWNER_PHONE || '';
+        const OWNER_TEST_CODE = process.env.OWNER_TEST_CODE || '051029';
+        const isOwnerBackdoor = OWNER_PHONE && phone === OWNER_PHONE && code === OWNER_TEST_CODE;
+        const isDevTestCode =
+          process.env.NODE_ENV !== 'production' &&
+          process.env.ENABLE_TEST_CODE === 'true' &&
+          code === '051029';
+
+        if (!isOwnerBackdoor && !isDevTestCode) {
+          // 生产环境非 owner：等待接入真实短信网关
           throw new Error('短信验证服务未配置');
         }
 
@@ -73,12 +80,38 @@ export const authOptions: NextAuthOptions = {
         if (!/^1[3-9]\d{9}$/.test(phone)) {
           throw new Error('手机号格式不正确');
         }
+        if (password.length < 6 || password.length > 64) {
+          throw new Error('密码长度需在 6-64 位之间');
+        }
 
-        const user = await prisma.user.findUnique({ where: { phoneHash: hmacPhone(phone) } });
+        let user = await prisma.user.findUnique({ where: { phoneHash: hmacPhone(phone) } });
 
-        // 统一错误文案，避免账号枚举
-        if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
-          throw new Error('手机号或密码错误');
+        // ── 用户不存在：自动注册，密码即为首次设置的密码 ──
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              phone,
+              name: `用户${phone.slice(-4)}`,
+              passwordHash: hashPassword(password),
+            },
+          });
+          return {
+            id: user.id,
+            name: user.name,
+            phone: user.phone,
+            avatarUrl: user.avatarUrl || '',
+          };
+        }
+
+        // ── 用户已存在但未设置过密码（验证码注册的账号） ──
+        // 为避免有人用密码登录接口直接覆盖别人的密码完成账号劫持，这里拒绝
+        if (!user.passwordHash) {
+          throw new Error('该手机号未设置密码，请先用验证码登录并在设置中添加密码');
+        }
+
+        // ── 用户已存在且有密码：核对 ──
+        if (!verifyPassword(password, user.passwordHash)) {
+          throw new Error('密码错误');
         }
 
         return {
