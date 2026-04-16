@@ -42,7 +42,7 @@ const nextConfig = {
       { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
       { key: 'Content-Security-Policy', value: csp },
     ];
-    if (isProd) {
+    if (isProd && process.env.ENABLE_HTTPS === 'true') {
       headers.push({ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' });
     }
     return [{ source: '/:path*', headers }];

@@ -3,14 +3,12 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // 测试数据库连接
-    const userCount = await prisma.user.count();
+    await prisma.user.count();
     return NextResponse.json({
       success: true,
       data: {
         status: 'healthy',
         database: 'connected',
-        userCount,
         timestamp: new Date().toISOString(),
       },
     });

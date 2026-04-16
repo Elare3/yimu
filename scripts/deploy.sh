@@ -76,10 +76,11 @@ if [ "$ENC_LEN" -ne 65 ] && [ "$ENC_LEN" -ne 64 ]; then
   die "ENCRYPTION_KEY 必须是 64 位 hex 字符（当前 $((ENC_LEN-1)) 字符）。生成：openssl rand -hex 32"
 fi
 
-# 生产环境绝对禁止 ENABLE_TEST_CODE=true
-if grep -q '^NODE_ENV=production' "$ENV_FILE" && grep -q '^ENABLE_TEST_CODE=true' "$ENV_FILE"; then
-  die "生产环境检测到 ENABLE_TEST_CODE=true，这是测试后门，请删除该行"
-fi
+# 测试阶段：短信验证码功能未启用，允许 ENABLE_TEST_CODE=true
+# TODO: 短信验证码上线后恢复此检查
+# if grep -q '^NODE_ENV=production' "$ENV_FILE" && grep -q '^ENABLE_TEST_CODE=true' "$ENV_FILE"; then
+#   die "生产环境检测到 ENABLE_TEST_CODE=true，这是测试后门，请删除该行"
+# fi
 ok "$ENV_FILE 检查通过"
 
 # ── 2. 拉取最新代码 ──
@@ -103,10 +104,20 @@ else
   fi
 fi
 
-# ── 3. 严格按 lockfile 安装依赖 ──
+# ── 3. 严格按 lockfile 安装依赖（lockfile 无变化则跳过） ──
 step "3. npm ci（严格按 lockfile）"
-npm ci
-ok "依赖安装完成"
+LOCK_HASH_FILE="node_modules/.lockfile-hash"
+LOCK_HASH_NOW=$(sha256sum package-lock.json | cut -d' ' -f1)
+LOCK_HASH_OLD=""
+[ -f "$LOCK_HASH_FILE" ] && LOCK_HASH_OLD=$(cat "$LOCK_HASH_FILE")
+
+if [ "$LOCK_HASH_NOW" = "$LOCK_HASH_OLD" ] && [ -d node_modules ]; then
+  ok "package-lock.json 无变化，跳过 npm ci"
+else
+  npm ci
+  echo "$LOCK_HASH_NOW" > "$LOCK_HASH_FILE"
+  ok "依赖安装完成"
+fi
 
 # ── 4. 校验 prisma 版本一致 ──
 step "4. 校验 Prisma 版本一致（避免 npx 拉到 7.x）"

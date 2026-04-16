@@ -2,7 +2,7 @@ import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword, hashPassword } from '@/lib/password';
-import { hmacPhone } from '@/lib/encryption';
+import { encrypt, hmacPhone } from '@/lib/encryption';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -47,7 +47,8 @@ export const authOptions: NextAuthOptions = {
         if (!user) {
           user = await prisma.user.create({
             data: {
-              phone,
+              phone: encrypt(phone),
+              phoneHash: hmacPhone(phone),
               name: `用户${phone.slice(-4)}`,
             },
           });
@@ -90,7 +91,8 @@ export const authOptions: NextAuthOptions = {
         if (!user) {
           user = await prisma.user.create({
             data: {
-              phone,
+              phone: encrypt(phone),
+              phoneHash: hmacPhone(phone),
               name: `用户${phone.slice(-4)}`,
               passwordHash: hashPassword(password),
             },
@@ -129,12 +131,12 @@ export const authOptions: NextAuthOptions = {
   },
   cookies: {
     sessionToken: {
-      name: process.env.NODE_ENV === 'production'
+      name: process.env.ENABLE_HTTPS === 'true'
         ? '__Secure-next-auth.session-token'
         : 'next-auth.session-token',
       options: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.ENABLE_HTTPS === 'true',
         sameSite: 'lax' as const,
         path: '/',
       },
