@@ -381,7 +381,7 @@ export function AIInsightWidget() {
           snap.activeProjects > 0 || snap.overdueCount > 0
         );
 
-        if (!hasData && data.insights.length === 0) {
+        if (!hasData) {
           return (
             <div className="text-center py-10">
               <p className="text-3xl mb-3">📊</p>

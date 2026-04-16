@@ -122,6 +122,7 @@ export default function QuoteForm({ initialData, onSubmit, onCancel, submitLabel
   ];
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* 基本信息 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -313,27 +314,29 @@ export default function QuoteForm({ initialData, onSubmit, onCancel, submitLabel
         </Button>
       </div>
 
-      <Modal isOpen={showNewClient} onClose={() => setShowNewClient(false)} title="新建客户" size="lg">
-        <ClientForm
-          onSubmit={async (data) => {
-            const res = await fetch('/api/clients', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(data),
-            });
-            const result = await res.json();
-            if (result.success) {
-              toast.success('客户创建成功');
-              await mutateClients();
-              setClientId(result.data.id);
-              setShowNewClient(false);
-            } else {
-              toast.error(result.error || '创建失败');
-            }
-          }}
-          onCancel={() => setShowNewClient(false)}
-        />
-      </Modal>
     </form>
+
+    <Modal isOpen={showNewClient} onClose={() => setShowNewClient(false)} title="新建客户" size="lg">
+      <ClientForm
+        onSubmit={async (data) => {
+          const res = await fetch('/api/clients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          const result = await res.json();
+          if (result.success) {
+            toast.success('客户创建成功');
+            await mutateClients();
+            setClientId(result.data.id);
+            setShowNewClient(false);
+          } else {
+            toast.error(result.error || '创建失败');
+          }
+        }}
+        onCancel={() => setShowNewClient(false)}
+      />
+    </Modal>
+    </>
   );
 }
