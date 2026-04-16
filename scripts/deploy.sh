@@ -82,15 +82,15 @@ fi
 #   die "生产环境检测到 ENABLE_TEST_CODE=true，这是测试后门，请删除该行"
 # fi
 
-# HTTPS 配置检查
+# HTTPS / IP 模式检查
+NEXTAUTH_URL=$(grep '^NEXTAUTH_URL=' "$ENV_FILE" | sed 's/^NEXTAUTH_URL=//' | tr -d '"')
 if grep -q '^ENABLE_HTTPS=true' "$ENV_FILE"; then
-  NEXTAUTH_URL=$(grep '^NEXTAUTH_URL=' "$ENV_FILE" | sed 's/^NEXTAUTH_URL=//')
   if [[ ! "$NEXTAUTH_URL" =~ ^https:// ]]; then
     die "ENABLE_HTTPS=true 但 NEXTAUTH_URL 不是 https 开头：$NEXTAUTH_URL"
   fi
-  ok "HTTPS 已启用"
+  ok "HTTPS 模式（$NEXTAUTH_URL）"
 else
-  warn "HTTPS 未启用（ENABLE_HTTPS 未设置），Cookie 将不使用 Secure 标记"
+  ok "HTTP/IP 模式（$NEXTAUTH_URL）"
 fi
 
 ok "$ENV_FILE 检查通过"
@@ -194,8 +194,52 @@ pm2 start npm --name "$PM2_APP" -- start
 pm2 save
 ok "pm2 $PM2_APP 已启动"
 
-# ── 10. 健康检查 ──
-step "10. 健康检查"
+# ── 10. 自动配置 Nginx ──
+step "10. 配置 Nginx"
+NGINX_CONF="/etc/nginx/sites-enabled/yimu"
+if [ -f "$NGINX_CONF" ]; then
+  if grep -q '^ENABLE_HTTPS=true' "$ENV_FILE"; then
+    # HTTPS 域名模式
+    DOMAIN=$(echo "$NEXTAUTH_URL" | sed 's|https://||')
+    ok "HTTPS 模式，请确认 Nginx 已配置域名 $DOMAIN 的 SSL"
+  else
+    # HTTP/IP 模式：自动写入 IP 配置
+    SERVER_IP=$(echo "$NEXTAUTH_URL" | sed 's|http://||' | sed 's|:.*||')
+    sudo tee "$NGINX_CONF" > /dev/null << NGINXEOF
+server {
+    listen 80;
+    server_name $SERVER_IP;
+
+    client_max_body_size 10M;
+
+    location /uploads/ {
+        alias /var/www/yimu/public/uploads/;
+        expires 30d;
+        access_log off;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:${PORT:-3000};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 120s;
+    }
+}
+NGINXEOF
+    sudo nginx -t && sudo systemctl reload nginx
+    ok "Nginx 已配置为 IP 模式（$SERVER_IP）"
+  fi
+else
+  warn "未找到 $NGINX_CONF，跳过 Nginx 配置"
+fi
+
+# ── 11. 健康检查 ──
+step "11. 健康检查"
 PORT=$(grep '^PORT=' "$ENV_FILE" | sed 's/^PORT=//' | tr -d '"' || true)
 PORT="${PORT:-3000}"
 
@@ -209,14 +253,11 @@ done
 
 if curl -sf "http://127.0.0.1:${PORT}/api/health" -o /dev/null; then
   ok "健康检查通过（:${PORT}/api/health）"
-  # HTTPS 外部检查
-  if grep -q '^ENABLE_HTTPS=true' "$ENV_FILE"; then
-    DOMAIN=$(grep '^NEXTAUTH_URL=' "$ENV_FILE" | sed 's/^NEXTAUTH_URL=//')
-    if curl -sf "${DOMAIN}/api/health" -o /dev/null 2>/dev/null; then
-      ok "HTTPS 访问正常（${DOMAIN}）"
-    else
-      warn "内网健康但 HTTPS 访问失败，检查 Nginx 和 SSL 证书"
-    fi
+  # 外部访问检查
+  if curl -sf "${NEXTAUTH_URL}/api/health" -o /dev/null 2>/dev/null; then
+    ok "外部访问正常（${NEXTAUTH_URL}）"
+  else
+    warn "内网健康但外部访问失败，检查 Nginx 配置和防火墙"
   fi
 else
   warn "健康检查未通过，请查看 pm2 logs $PM2_APP"
