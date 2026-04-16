@@ -386,7 +386,7 @@ export async function smartParseTransaction(input: string, userId?: string) {
   // 规则引擎增强：对每笔交易做本地分类校验和金额校验
   const parsedList = transactions.map((tx: any) => {
     const localClassify = TRANSACTION_INFERENCE_RULES.tryLocalClassify(tx.description || input);
-    const category = localClassify?.category || tx.category || '其他';
+    const category = localClassify?.category || tx.category || '其他支出';
     const subcategory = localClassify?.subcategory || tx.subcategory || '';
     const amountCheck = TRANSACTION_INFERENCE_RULES.amountSanityCheck(subcategory, Math.abs(tx.amount || 0));
 

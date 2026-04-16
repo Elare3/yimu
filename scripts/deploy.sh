@@ -81,6 +81,18 @@ fi
 # if grep -q '^NODE_ENV=production' "$ENV_FILE" && grep -q '^ENABLE_TEST_CODE=true' "$ENV_FILE"; then
 #   die "生产环境检测到 ENABLE_TEST_CODE=true，这是测试后门，请删除该行"
 # fi
+
+# HTTPS 配置检查
+if grep -q '^ENABLE_HTTPS=true' "$ENV_FILE"; then
+  NEXTAUTH_URL=$(grep '^NEXTAUTH_URL=' "$ENV_FILE" | sed 's/^NEXTAUTH_URL=//')
+  if [[ ! "$NEXTAUTH_URL" =~ ^https:// ]]; then
+    die "ENABLE_HTTPS=true 但 NEXTAUTH_URL 不是 https 开头：$NEXTAUTH_URL"
+  fi
+  ok "HTTPS 已启用"
+else
+  warn "HTTPS 未启用（ENABLE_HTTPS 未设置），Cookie 将不使用 Secure 标记"
+fi
+
 ok "$ENV_FILE 检查通过"
 
 # ── 2. 拉取最新代码 ──
@@ -121,9 +133,7 @@ fi
 
 # ── 4. 校验 prisma 版本一致 ──
 step "4. 校验 Prisma 版本一致（避免 npx 拉到 7.x）"
-# 本地 prisma CLI 版本
 PRISMA_CLI_VER=$(./node_modules/.bin/prisma -v 2>/dev/null | awk -F': *' '/^prisma[[:space:]]*:/ {print $2; exit}')
-# 运行时 @prisma/client 版本
 PRISMA_RT_VER=$(node -p "require('./node_modules/@prisma/client/package.json').version")
 
 echo "  prisma CLI       : $PRISMA_CLI_VER"
@@ -138,7 +148,6 @@ if [ "$CLI_MAJOR" != "$EXPECTED_PRISMA_MAJOR" ]; then
   die "prisma 主版本应为 $EXPECTED_PRISMA_MAJOR，当前为 $CLI_MAJOR。检查 package.json 与 package-lock.json"
 fi
 
-# 检查全局 prisma 是否会污染 npx
 if command -v prisma >/dev/null 2>&1; then
   GLOBAL_PRISMA=$(command -v prisma)
   case "$GLOBAL_PRISMA" in
@@ -166,31 +175,49 @@ else
   fi
 fi
 
-# ── 7. 构建 ──
-step "7. next build（完整 TS + ESLint 检查）"
+# ── 7. 确保上传目录存在 ──
+step "7. 检查上传目录"
+mkdir -p public/uploads/avatars
+ok "uploads 目录就绪"
+
+# ── 8. 构建 ──
+step "8. next build（完整 TS + ESLint 检查）"
 npm run build
 ok "构建完成"
 
-# ── 8. 重载 pm2 ──
-step "8. 重载 PM2 ($PM2_APP)"
+# ── 9. 重载 pm2 ──
+step "9. 重载 PM2 ($PM2_APP)"
 if pm2 describe "$PM2_APP" >/dev/null 2>&1; then
-  pm2 reload "$PM2_APP" --update-env
-  ok "pm2 reload $PM2_APP 完成"
-else
-  warn "pm2 没有 $PM2_APP 进程，首次启动"
-  pm2 start npm --name "$PM2_APP" -- start
-  pm2 save
-  ok "pm2 start $PM2_APP 完成"
+  pm2 delete "$PM2_APP"
 fi
+pm2 start npm --name "$PM2_APP" -- start
+pm2 save
+ok "pm2 $PM2_APP 已启动"
 
-# ── 9. 健康检查 ──
-step "9. 健康检查"
-sleep 2
-# /api/health 是否 200（如无则跳过）
+# ── 10. 健康检查 ──
+step "10. 健康检查"
 PORT=$(grep '^PORT=' "$ENV_FILE" | sed 's/^PORT=//' | tr -d '"' || true)
 PORT="${PORT:-3000}"
+
+RETRIES=0
+MAX_RETRIES=5
+until curl -sf "http://127.0.0.1:${PORT}/api/health" -o /dev/null || [ "$RETRIES" -ge "$MAX_RETRIES" ]; do
+  RETRIES=$((RETRIES + 1))
+  echo "  等待 Next.js 启动... ($RETRIES/$MAX_RETRIES)"
+  sleep 3
+done
+
 if curl -sf "http://127.0.0.1:${PORT}/api/health" -o /dev/null; then
   ok "健康检查通过（:${PORT}/api/health）"
+  # HTTPS 外部检查
+  if grep -q '^ENABLE_HTTPS=true' "$ENV_FILE"; then
+    DOMAIN=$(grep '^NEXTAUTH_URL=' "$ENV_FILE" | sed 's/^NEXTAUTH_URL=//')
+    if curl -sf "${DOMAIN}/api/health" -o /dev/null 2>/dev/null; then
+      ok "HTTPS 访问正常（${DOMAIN}）"
+    else
+      warn "内网健康但 HTTPS 访问失败，检查 Nginx 和 SSL 证书"
+    fi
+  fi
 else
   warn "健康检查未通过，请查看 pm2 logs $PM2_APP"
 fi

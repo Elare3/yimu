@@ -133,7 +133,7 @@ on('project.status_changed', async ({ projectId, userId, from, to }) => {
           if (lastNode) {
             await prisma.paymentNode.update({
               where: { id: lastNode.id },
-              data: { dueDate: new Date() },
+              data: { dueDate: new Date(new Date().setHours(23, 59, 59, 999)) },
             });
           }
           break;
@@ -235,8 +235,8 @@ on('payment.received', async ({ paymentNodeId, userId, amount }) => {
       userId,
       type: 'income',
       amount,
-      category: 'project_income',
-      subcategory: node.project?.category || 'service',
+      category: '项目收入',
+      subcategory: node.project?.category || '其他服务',
       description: `${node.client?.name || '客户'} - ${node.project?.name || '项目'} - ${node.name}`,
       projectId: node.projectId,
       clientId: node.clientId,

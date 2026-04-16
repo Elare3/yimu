@@ -8,18 +8,20 @@ import { Button } from '@/components/ui/Button';
 
 const INCOME_CATEGORIES = [
   { value: '项目收入', label: '项目收入' },
-  { value: '咨询费', label: '咨询费' },
+  { value: '咨询服务', label: '咨询服务' },
+  { value: '被动收入', label: '被动收入' },
   { value: '其他收入', label: '其他收入' },
 ];
 
 const EXPENSE_CATEGORIES = [
-  { value: '办公费', label: '办公费' },
-  { value: '交通费', label: '交通费' },
-  { value: '餐饮费', label: '餐饮费' },
-  { value: '软件服务', label: '软件服务' },
-  { value: '设备采购', label: '设备采购' },
+  { value: '云服务', label: '云服务' },
+  { value: 'AI服务', label: 'AI服务' },
+  { value: '软件订阅', label: '软件订阅' },
+  { value: '营销推广', label: '营销推广' },
+  { value: '办公费用', label: '办公费用' },
   { value: '外包费用', label: '外包费用' },
   { value: '税费', label: '税费' },
+  { value: '生活开支', label: '生活开支' },
   { value: '其他支出', label: '其他支出' },
 ];
 

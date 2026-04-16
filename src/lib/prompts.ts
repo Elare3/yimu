@@ -220,63 +220,65 @@ export const TRANSACTION_SYSTEM_PROMPT = `你是「小木」，一木平台的�
 解析用户的自然语言描述，提取收支信息，返回结构化数据。必须结合下方的【金额合理性校验表】判断金额是否在行业合理区间内，如有异常需标记。
 
 ## 分类体系（2026年OPC适用）
+所有category和subcategory必须使用中文。
 
 ### 收入分类
-- project_income: 项目收入
-  - design_service: 设计服务（LOGO/VI/海报/UI等）
-  - dev_service: 开发服务（网站/小程序/APP等）
-  - consulting: 咨询服务（技术咨询/方案评审等）
-  - content_creation: 内容创作（文案/短视频/自媒体代运营等）
-  - operation_service: 运营服务（SEO/SEM/代运营等）
-  - other_service: 其他服务
-- passive_income: 被动收入
-  - platform_share: 平台分成/佣金
-  - royalty: 版权/授权收入
-  - course_training: 课程/培训/知识付费
-  - template_sale: 模板/素材/工具售卖
-- other_income: 其他收入（利息/退款/补贴等）
+- 项目收入
+  - 设计服务（LOGO/VI/海报/UI等）
+  - 开发服务（网站/小程序/APP等）
+  - 内容创作（文案/短视频/自媒体代运营等）
+  - 运营服务（SEO/SEM/代运营等）
+  - 其他服务
+- 咨询服务
+  - 咨询服务（技术咨询/方案评审/培训/教学/顾问）
+- 被动收入
+  - 平台分成（分成/佣金/推荐奖励/CPS）
+  - 版权收入（版权/授权/使用费/许可费）
+  - 课程培训（课程/网课/训练营/知识付费）
+  - 模板销售（模板/素材/工具/插件售卖）
+- 其他收入（利息/退款/补贴/赔偿/红包等）
 
 ### 支出分类
-- cloud_infra: 云基础设施
-  - cloud_server: 云服务器/轻量服务器（阿里云ECS/轻量38-199元/年，腾讯云轻量等）
-  - database: 数据库服务（MongoDB Atlas/RDS等）
-  - cdn_storage: CDN/对象存储/带宽
-  - domain: 域名（50-100元/年）
-  - ssl: SSL证书
-- ai_api: AI模型API费用
-  - dashscope: 阿里云百炼/DashScope（Qwen-Max输入2.5元/百万Token）
-  - deepseek: DeepSeek API
-  - other_ai: 其他AI API（OpenAI/Claude/智谱等）
-- software_sub: 软件订阅
-  - design_tool: 设计工具（Figma/PS/Sketch/Canva等）
-  - dev_tool: 开发工具（GitHub Copilot/JetBrains/Vercel等）
-  - office_tool: 办公协作（飞书/钉钉/Notion/语雀等）
-  - ai_tool: AI工具订阅（ChatGPT Plus/Claude Pro等）
-  - other_sub: 其他SaaS订阅
-- marketing: 营销费用
-  - ad_spend: 广告投放（信息流/搜索竞价）
-  - content_promo: 内容推广（小红书/抖音/知乎投放）
-  - community: 社群运营/KOL合作
-- office: 办公费用
-  - cowork_space: 联合办公/工位（一人公司常见）
-  - office_supply: 办公用品/耗材
-  - communication: 通讯费（手机/宽带）
-  - equipment: 设备采购（电脑/显示器/外设等）
-- outsource: 外包费用
-  - design_outsource: 设计外包
-  - dev_outsource: 开发外包
-  - content_outsource: 内容/文案外包
-  - other_outsource: 其他外包
-- tax_fee: 税费
-  - vat: 增值税（小规模纳税人：月销≤10万免征；超出按1%征收）
-  - income_tax: 所得税（小微企业年利润≤300万实际税负5%；个体户年应纳税所得≤200万减半征收）
-  - stamp_tax: 印花税/附加税（减半征收至2027年底）
-  - social_insurance: 社保/公积金
-- living: 个人生活（非经营支出，仅记录不计入成本）
-  - meal: 餐饮
-  - transport: 交通出行
-  - personal: 个人消费
-- other_expense: 其他支出
+- 云服务
+  - 云服务器（阿里云ECS/轻量38-199元/年，腾讯云轻量等）
+  - 数据库（MongoDB Atlas/RDS等）
+  - CDN存储（CDN/对象存储/带宽）
+  - 域名（50-100元/年）
+  - SSL证书
+- AI服务
+  - 通义千问（阿里云百炼/DashScope，Qwen-Max输入2.5元/百万Token）
+  - DeepSeek（DeepSeek API）
+  - 其他AI（OpenAI/Claude/智谱等）
+- 软件订阅
+  - 设计工具（Figma/PS/Sketch/Canva等）
+  - 开发工具（GitHub Copilot/JetBrains/Vercel等）
+  - 办公工具（飞书/钉钉/Notion/语雀等）
+  - AI工具（ChatGPT Plus/Claude Pro等）
+  - 其他订阅（其他SaaS/会员/年费）
+- 营销推广
+  - 广告投放（信息流/搜索竞价/DOU+）
+  - 内容推广（小红书/抖音/知乎投放/种草）
+  - 社群合作（社群运营/KOL合作/达人）
+- 办公费用
+  - 办公空间（联合办公/工位/房租）
+  - 办公用品（办公用品/耗材/打印）
+  - 通讯费（手机/宽带/话费）
+  - 设备采购（电脑/显示器/外设等）
+- 外包费用
+  - 设计外包
+  - 开发外包
+  - 内容外包（文案/翻译/配音）
+  - 其他外包（兼职/临时工）
+- 税费
+  - 增值税（小规模纳税人：月销≤10万免征；超出按1%征收）
+  - 所得税（小微企业年利润≤300万实际税负5%；个体户年应纳税所得≤200万减半征收）
+  - 印花税（附加税/城建税/教育附加，减半征收至2027年底）
+  - 社保公积金
+- 生活开支（非经营支出，仅记录不计入成本）
+  - 餐饮
+  - 交通
+  - 个人消费
+- 其他支出
 
 ## 【金额合理性校验表 — 2026年OPC常见支出基准】
 
@@ -403,8 +405,8 @@ export function buildTransactionParsePrompt(input: string, today: string) {
 {
   "type": "income 或 expense",
   "amount": 正数金额,
-  "category": "一级分类代码（如cloud_infra/ai_api/software_sub/marketing/office/outsource/tax_fee/living/other_expense/project_income/passive_income/other_income）",
-  "subcategory": "二级分类代码（如cloud_server/dashscope/design_tool等）",
+  "category": "一级分类（中文，如：云服务/AI服务/软件订阅/营销推广/办公费用/外包费用/税费/生活开支/其他支出/项目收入/咨询服务/被动收入/其他收入）",
+  "subcategory": "二级分类（中文，如：云服务器/设计工具/广告投放/设计服务/开发服务等）",
   "description": "简短描述（8字以内）",
   "date": "YYYY-MM-DD",
   "paymentMethod": "wechat|alipay|bank_transfer|credit_card|cash|unknown",
@@ -616,78 +618,80 @@ export function buildReminderPrompt(params: {
 // ============================================================
 
 export const CLASSIFY_SYSTEM_PROMPT = `你是收支分类引擎。根据描述文字将收支记录归类到正确的类目，并标注税务属性。
+所有category和subcategory必须使用中文。
 
 ## 分类体系
 
 ### 收入（type=income）
-| category | subcategory | 关键词命中规则 |
+| category（一级分类） | subcategory（二级分类） | 关键词命中规则 |
 |----------|------------|--------------|
-| project_income | design_service | LOGO/VI/海报/UI/名片/包装/插画/详情页/主图/Banner/PPT |
-| project_income | dev_service | 网站/小程序/APP/开发/前端/后端/系统/程序/代码/部署 |
-| project_income | consulting | 咨询/方案/评审/培训/教学/顾问 |
-| project_income | content_creation | 文案/撰写/短视频/拍摄/剪辑/脚本/公众号/小红书/内容 |
-| project_income | operation_service | SEO/SEM/投放/代运营/推广/引流/抖音运营 |
-| project_income | other_service | 翻译/校对/数据/标注/测试/其他服务 |
-| passive_income | platform_share | 分成/佣金/抽成/推荐奖励/CPS |
-| passive_income | royalty | 版权/授权/使用费/许可费 |
-| passive_income | course_training | 课程/网课/训练营/知识星球/付费专栏 |
-| passive_income | template_sale | 模板/素材/工具/插件/主题 |
-| other_income | - | 利息/退款/补贴/赔偿/中奖/红包（非业务） |
+| 项目收入 | 设计服务 | LOGO/VI/海报/UI/名片/包装/插画/详情页/主图/Banner/PPT |
+| 项目收入 | 开发服务 | 网站/小程序/APP/开发/前端/后端/系统/程序/代码/部署 |
+| 项目收入 | 内容创作 | 文案/撰写/短视频/拍摄/剪辑/脚本/公众号/小红书/内容 |
+| 项目收入 | 运营服务 | SEO/SEM/投放/代运营/推广/引流/抖音运营 |
+| 项目收入 | 其他服务 | 翻译/校对/数据/标注/测试/其他服务 |
+| 咨询服务 | 咨询服务 | 咨询/方案/评审/培训/教学/顾问 |
+| 被动收入 | 平台分成 | 分成/佣金/抽成/推荐奖励/CPS |
+| 被动收入 | 版权收入 | 版权/授权/使用费/许可费 |
+| 被动收入 | 课程培训 | 课程/网课/训练营/知识星球/付费专栏 |
+| 被动收入 | 模板销售 | 模板/素材/工具/插件/主题 |
+| 其他收入 | 其他收入 | 利息/退款/补贴/赔偿/中奖/红包（非业务） |
 
 ### 支出（type=expense）
-| category | subcategory | 关键词命中规则 | 可抵税 |
+| category（一级分类） | subcategory（二级分类） | 关键词命中规则 | 可抵税 |
 |----------|------------|--------------|-------|
-| cloud_infra | cloud_server | 阿里云/腾讯云/华为云/AWS/服务器/ECS/轻量/VPS | yes |
-| cloud_infra | database | MongoDB/MySQL/RDS/数据库/Atlas | yes |
-| cloud_infra | cdn_storage | CDN/OSS/存储/带宽/流量包 | yes |
-| cloud_infra | domain | 域名/domain/.com/.cn/万网/GoDaddy | yes |
-| cloud_infra | ssl | SSL/证书/HTTPS | yes |
-| ai_api | dashscope | 百炼/DashScope/通义/千问/Qwen | yes |
-| ai_api | deepseek | DeepSeek/深度求索 | yes |
-| ai_api | other_ai | OpenAI/GPT/Claude/Anthropic/智谱/GLM/Kimi/Gemini/文心 | yes |
-| software_sub | design_tool | Figma/PS/Photoshop/Illustrator/Sketch/Canva/即时设计/MasterGo/Adobe | yes |
-| software_sub | dev_tool | GitHub/Copilot/JetBrains/IDEA/VSCode/Vercel/Netlify/Cursor | yes |
-| software_sub | office_tool | 飞书/钉钉/企微/Notion/语雀/石墨/腾讯文档/WPS/Office | yes |
-| software_sub | ai_tool | ChatGPT Plus/Claude Pro/Midjourney/Stable Diffusion | yes |
-| software_sub | other_sub | 其他SaaS/订阅/会员/年费 | yes |
-| marketing | ad_spend | 广告/投放/竞价/信息流/DOU+/粉丝通/百度推广 | yes |
-| marketing | content_promo | 推广/种草/投稿/合作/互推 | yes |
-| marketing | community | 社群/KOL/达人/红人/合作推广 | yes |
-| office | cowork_space | 工位/联合办公/WeWork/共享办公/场地 | yes |
-| office | office_supply | 办公用品/打印/耗材/文具/纸张/墨盒 | yes |
-| office | communication | 话费/宽带/流量/手机套餐/电话费 | yes |
-| office | equipment | 电脑/MacBook/显示器/键盘/鼠标/iPad/手绘板/相机/麦克风 | yes |
-| outsource | design_outsource | 外包设计/设计师/美工 | yes |
-| outsource | dev_outsource | 外包开发/程序员/技术外包 | yes |
-| outsource | content_outsource | 外包文案/写手/翻译外包/配音 | yes |
-| outsource | other_outsource | 其他外包/兼职/临时工 | yes |
-| tax_fee | vat | 增值税/销项税 | no |
-| tax_fee | income_tax | 所得税/企业所得税/个税/经营所得 | no |
-| tax_fee | stamp_tax | 印花税/附加税/城建税/教育附加 | no |
-| tax_fee | social_insurance | 社保/公积金/医保/养老 | partial |
-| living | meal | 外卖/餐饮/午饭/晚饭/奶茶/咖啡（非招待） | no |
-| living | transport | 打车/地铁/公交/停车/加油（非业务出行） | no |
-| living | personal | 网购/衣服/娱乐/电影/游戏/个人消费 | no |
-| other_expense | - | 无法归入以上类别的支出 | depends |
+| 云服务 | 云服务器 | 阿里云/腾讯云/华为云/AWS/服务器/ECS/轻量/VPS | yes |
+| 云服务 | 数据库 | MongoDB/MySQL/RDS/数据库/Atlas/Redis | yes |
+| 云服务 | CDN存储 | CDN/OSS/存储/带宽/流量包 | yes |
+| 云服务 | 域名 | 域名/domain/.com/.cn/万网/GoDaddy | yes |
+| 云服务 | SSL证书 | SSL/证书/HTTPS | yes |
+| AI服务 | 通义千问 | 百炼/DashScope/通义/千问/Qwen | yes |
+| AI服务 | DeepSeek | DeepSeek/深度求索 | yes |
+| AI服务 | 其他AI | OpenAI/GPT/Claude/Anthropic/智谱/GLM/Kimi/Gemini/文心 | yes |
+| 软件订阅 | 设计工具 | Figma/PS/Photoshop/Illustrator/Sketch/Canva/即时设计/MasterGo/Adobe | yes |
+| 软件订阅 | 开发工具 | GitHub/Copilot/JetBrains/IDEA/VSCode/Vercel/Netlify/Cursor | yes |
+| 软件订阅 | 办公工具 | 飞书/钉钉/企微/Notion/语雀/石墨/腾讯文档/WPS/Office | yes |
+| 软件订阅 | AI工具 | ChatGPT Plus/Claude Pro/Midjourney/Stable Diffusion | yes |
+| 软件订阅 | 其他订阅 | 其他SaaS/订阅/会员/年费 | yes |
+| 营销推广 | 广告投放 | 广告/投放/竞价/信息流/DOU+/粉丝通/百度推广 | yes |
+| 营销推广 | 内容推广 | 推广/种草/投稿/合作/互推 | yes |
+| 营销推广 | 社群合作 | 社群/KOL/达人/红人/合作推广 | yes |
+| 办公费用 | 办公空间 | 工位/联合办公/WeWork/共享办公/场地/房租 | yes |
+| 办公费用 | 办公用品 | 办公用品/打印/耗材/文具/纸张/墨盒 | yes |
+| 办公费用 | 通讯费 | 话费/宽带/流量/手机套餐/电话费 | yes |
+| 办公费用 | 设备采购 | 电脑/MacBook/显示器/键盘/鼠标/iPad/手绘板/相机/麦克风 | yes |
+| 外包费用 | 设计外包 | 外包设计/设计师/美工 | yes |
+| 外包费用 | 开发外包 | 外包开发/程序员/技术外包 | yes |
+| 外包费用 | 内容外包 | 外包文案/写手/翻译外包/配音 | yes |
+| 外包费用 | 其他外包 | 其他外包/兼职/临时工 | yes |
+| 税费 | 增值税 | 增值税/销项税 | no |
+| 税费 | 所得税 | 所得税/企业所得税/个税/经营所得 | no |
+| 税费 | 印花税 | 印花税/附加税/城建税/教育附加 | no |
+| 税费 | 社保公积金 | 社保/公积金/医保/养老 | partial |
+| 生活开支 | 餐饮 | 外卖/餐饮/午饭/晚饭/奶茶/咖啡（非招待） | no |
+| 生活开支 | 交通 | 打车/地铁/公交/停车/加油（非业务出行） | no |
+| 生活开支 | 个人消费 | 网购/衣服/娱乐/电影/游戏/个人消费 | no |
+| 其他支出 | 其他支出 | 无法归入以上类别的支出 | depends |
 
 ## 税务标注规则（2026年OPC适用）
 - isDeductible=true：与经营直接相关的支出，可作为成本费用税前扣除
 - isDeductible=false：个人生活消费、税费本身不可抵扣
 - taxCategory映射：
-  - cloud_infra/ai_api/software_sub → "技术服务费"
-  - marketing → "广告费/业务宣传费"
-  - office(supply/communication) → "办公费"
-  - office(equipment) → 单价≤5000元→"办公费"；>5000元→"固定资产"（需折旧）
-  - outsource → "劳务费/外包服务费"
-  - tax_fee → "税金及附加"
-  - living → 不入账（或标记为"业主个人支出"）
+  - 云服务/AI服务/软件订阅 → "技术服务费"
+  - 营销推广 → "广告费/业务宣传费"
+  - 办公费用(办公用品/通讯费) → "办公费"
+  - 办公费用(设备采购) → 单价≤5000元→"办公费"；>5000元→"固定资产"（需折旧）
+  - 外包费用 → "劳务费/外包服务费"
+  - 税费 → "税金及附加"
+  - 生活开支 → 不入账（或标记为"业主个人支出"）
 
 ## 分类优先级
 1. 先匹配关键词表（精确命中）
 2. 关键词无命中时，根据金额区间+描述语义推断
-3. 仍无法判断时，归入other_expense/other_income，confidence标低
+3. 仍无法判断时，归入"其他支出"或"其他收入"，confidence标低
 
 ## 输出要求
+category和subcategory必须使用上表中的中文名称，不要使用英文代码。
 严格返回JSON，不要包含任何其他文字。`;
 
 
@@ -697,10 +701,10 @@ export function buildClassifyPrompt(type: string, description: string, amount: n
 描述：${description}
 金额：¥${amount}
 
-返回JSON：
+返回JSON（category和subcategory必须使用中文，如"云服务"、"设计工具"）：
 {
-  "category": "一级分类代码",
-  "subcategory": "二级分类代码",
+  "category": "一级分类（中文）",
+  "subcategory": "二级分类（中文）",
   "isDeductible": true或false,
   "taxCategory": "税务科目名称",
   "confidence": 0.0到1.0
@@ -722,8 +726,8 @@ ${lines}
 [
   {
     "id": "记录ID",
-    "category": "一级分类代码",
-    "subcategory": "二级分类代码",
+    "category": "一级分类（中文）",
+    "subcategory": "二级分类（中文）",
     "isDeductible": true或false,
     "taxCategory": "税务科目名称",
     "confidence": 0.0到1.0
@@ -868,16 +872,7 @@ export function buildInsightPrompt(data: {
 
   // 成本维度
   monthExpense: number;
-  expenseBreakdown?: {
-    cloud_infra?: number;
-    ai_api?: number;
-    software_sub?: number;
-    marketing?: number;
-    office?: number;
-    outsource?: number;
-    tax_fee?: number;
-    living?: number;
-  };
+  expenseBreakdown?: Record<string, number>;
 
   // 现金流维度
   overduePayments: { project: string; client: string; amount: number; days: number }[];
@@ -923,15 +918,9 @@ export function buildInsightPrompt(data: {
   parts.push(`\n## 成本数据`);
   parts.push(`- 本月支出：¥${data.monthExpense}（利润率${profitRate}%）`);
   if (data.expenseBreakdown) {
-    const eb = data.expenseBreakdown;
-    const items = [];
-    if (eb.cloud_infra) items.push(`云基础设施¥${eb.cloud_infra}`);
-    if (eb.ai_api) items.push(`AI API¥${eb.ai_api}`);
-    if (eb.software_sub) items.push(`软件订阅¥${eb.software_sub}`);
-    if (eb.marketing) items.push(`营销¥${eb.marketing}`);
-    if (eb.office) items.push(`办公¥${eb.office}`);
-    if (eb.outsource) items.push(`外包¥${eb.outsource}`);
-    if (eb.tax_fee) items.push(`税费¥${eb.tax_fee}`);
+    const items = Object.entries(data.expenseBreakdown)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => `${k}¥${v}`);
     if (items.length > 0) parts.push(`- 支出构成：${items.join('、')}`);
   }
 

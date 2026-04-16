@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
-import { successResponse, errorResponse, parsePagination, safeParseFloat } from '@/lib/utils';
+import { successResponse, errorResponse, parsePagination, safeParseFloat, endOfDay } from '@/lib/utils';
 
 // GET /api/payments - 收款节点列表
 export async function GET(req: Request) {
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
         clientId: clientId || project.clientId,
         name,
         amount: safeParseFloat(amount) ?? 0,
-        dueDate: new Date(dueDate),
+        dueDate: endOfDay(dueDate),
         notes: notes || '',
       },
       include: {

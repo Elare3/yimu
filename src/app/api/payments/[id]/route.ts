@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
-import { successResponse, errorResponse } from '@/lib/utils';
+import { successResponse, errorResponse, endOfDay } from '@/lib/utils';
 
 // PUT /api/payments/[id] - 更新收款节点
 export async function PUT(
@@ -24,7 +24,7 @@ export async function PUT(
     if (body.dueDate !== undefined) {
       const date = new Date(body.dueDate);
       if (isNaN(date.getTime())) return errorResponse('日期无效', 400);
-      updateData.dueDate = date;
+      updateData.dueDate = endOfDay(date);
     }
     if (body.notes !== undefined) updateData.notes = body.notes;
 

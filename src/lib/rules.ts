@@ -288,17 +288,43 @@ export const TAX_RULES_2026 = {
 /** 记账分类智能推导规则 */
 export const TRANSACTION_INFERENCE_RULES = {
   keywordMap: {
-    '阿里云|腾讯云|华为云|AWS|Azure': { category: 'cloud_infra', subcategory: 'cloud_server', isDeductible: true },
-    '百炼|DashScope|OpenAI|DeepSeek|通义千问|文心一言': { category: 'ai_api', subcategory: 'dashscope', isDeductible: true },
-    '域名|DNS|SSL|CDN|备案': { category: 'cloud_infra', subcategory: 'domain_hosting', isDeductible: true },
-    'Figma|Sketch|Adobe|PS|AI|Photoshop|Illustrator': { category: 'software_sub', subcategory: 'design_tool', isDeductible: true },
-    'JetBrains|IDEA|WebStorm|Copilot|Cursor|GitHub': { category: 'software_sub', subcategory: 'dev_tool', isDeductible: true },
-    'Notion|飞书|钉钉|企业微信|Slack': { category: 'software_sub', subcategory: 'collaboration', isDeductible: true },
-    'DOU\\+|投放|推广|小红书薯条|直通车|广告': { category: 'marketing', subcategory: 'ad_spend', isDeductible: true },
-    'MacBook|ThinkPad|显示器|键盘|鼠标|电脑': { category: 'office', subcategory: 'equipment', isDeductible: true },
-    '打印|纸|墨盒|文具': { category: 'office', subcategory: 'supplies', isDeductible: true },
-    '外卖|美团|饿了么|午饭|晚饭|咖啡|奶茶': { category: 'living', subcategory: 'meal', isDeductible: false },
-    '滴滴|出租车|地铁|公交|打车': { category: 'living', subcategory: 'transport', isDeductible: false },
+    '阿里云|腾讯云|华为云|AWS|Azure|服务器|ECS|轻量|VPS': { category: '云服务', subcategory: '云服务器', isDeductible: true },
+    'MongoDB|MySQL|RDS|数据库|Atlas|Redis': { category: '云服务', subcategory: '数据库', isDeductible: true },
+    'CDN|OSS|存储|带宽|流量包': { category: '云服务', subcategory: 'CDN存储', isDeductible: true },
+    '域名|DNS|备案|万网|GoDaddy|\\.com|\\.cn': { category: '云服务', subcategory: '域名', isDeductible: true },
+    'SSL|证书|HTTPS': { category: '云服务', subcategory: 'SSL证书', isDeductible: true },
+    '百炼|DashScope|通义|千问|Qwen': { category: 'AI服务', subcategory: '通义千问', isDeductible: true },
+    'DeepSeek|深度求索': { category: 'AI服务', subcategory: 'DeepSeek', isDeductible: true },
+    'OpenAI|GPT|Claude|Anthropic|智谱|GLM|Kimi|Gemini|文心': { category: 'AI服务', subcategory: '其他AI', isDeductible: true },
+    'Figma|Sketch|Adobe|PS|Photoshop|Illustrator|Canva|即时设计|MasterGo': { category: '软件订阅', subcategory: '设计工具', isDeductible: true },
+    'JetBrains|IDEA|WebStorm|Copilot|Cursor|GitHub|Vercel|VSCode': { category: '软件订阅', subcategory: '开发工具', isDeductible: true },
+    'Notion|飞书|钉钉|企业微信|企微|Slack|语雀|石墨|腾讯文档|WPS': { category: '软件订阅', subcategory: '办公工具', isDeductible: true },
+    'ChatGPT Plus|Claude Pro|Midjourney|Stable Diffusion': { category: '软件订阅', subcategory: 'AI工具', isDeductible: true },
+    'DOU\\+|投放|推广|小红书薯条|直通车|广告|竞价|信息流|百度推广': { category: '营销推广', subcategory: '广告投放', isDeductible: true },
+    '种草|投稿|互推|合作推广|KOL|达人|红人': { category: '营销推广', subcategory: '内容推广', isDeductible: true },
+    '工位|联合办公|WeWork|共享办公|场地|房租': { category: '办公费用', subcategory: '办公空间', isDeductible: true },
+    'MacBook|ThinkPad|显示器|键盘|鼠标|电脑|iPad|手绘板|相机|麦克风': { category: '办公费用', subcategory: '设备采购', isDeductible: true },
+    '打印|纸|墨盒|文具|耗材|办公用品': { category: '办公费用', subcategory: '办公用品', isDeductible: true },
+    '话费|宽带|流量|手机套餐|电话费': { category: '办公费用', subcategory: '通讯费', isDeductible: true },
+    '外包设计|设计师|美工': { category: '外包费用', subcategory: '设计外包', isDeductible: true },
+    '外包开发|程序员|技术外包': { category: '外包费用', subcategory: '开发外包', isDeductible: true },
+    '外包文案|写手|翻译外包|配音': { category: '外包费用', subcategory: '内容外包', isDeductible: true },
+    '增值税|销项税': { category: '税费', subcategory: '增值税', isDeductible: false },
+    '所得税|个税|经营所得': { category: '税费', subcategory: '所得税', isDeductible: false },
+    '印花税|附加税|城建税|教育附加': { category: '税费', subcategory: '印花税', isDeductible: false },
+    '社保|公积金|医保|养老': { category: '税费', subcategory: '社保公积金', isDeductible: false },
+    '外卖|美团|饿了么|午饭|晚饭|咖啡|奶茶|餐饮': { category: '生活开支', subcategory: '餐饮', isDeductible: false },
+    '滴滴|出租车|地铁|公交|打车|停车|加油': { category: '生活开支', subcategory: '交通', isDeductible: false },
+    '网购|衣服|娱乐|电影|游戏|个人消费': { category: '生活开支', subcategory: '个人消费', isDeductible: false },
+    'LOGO|VI|海报|UI|名片|包装|插画|详情页|主图|Banner': { category: '项目收入', subcategory: '设计服务', isDeductible: false },
+    '网站|小程序|APP|开发|前端|后端|系统|程序|代码|部署': { category: '项目收入', subcategory: '开发服务', isDeductible: false },
+    '咨询|方案|评审|培训|教学|顾问': { category: '咨询服务', subcategory: '咨询服务', isDeductible: false },
+    '文案|撰写|短视频|拍摄|剪辑|脚本|公众号|小红书|内容': { category: '项目收入', subcategory: '内容创作', isDeductible: false },
+    'SEO|SEM|代运营|抖音运营|引流': { category: '项目收入', subcategory: '运营服务', isDeductible: false },
+    '分成|佣金|抽成|推荐奖励|CPS': { category: '被动收入', subcategory: '平台分成', isDeductible: false },
+    '版权|授权|使用费|许可费': { category: '被动收入', subcategory: '版权收入', isDeductible: false },
+    '课程|网课|训练营|知识星球|付费专栏': { category: '被动收入', subcategory: '课程培训', isDeductible: false },
+    '模板|素材|工具|插件|主题': { category: '被动收入', subcategory: '模板销售', isDeductible: false },
   } as Record<string, { category: string; subcategory: string; isDeductible: boolean }>,
 
   /** 先走关键词匹配（免费+快），匹配不到再调AI */
@@ -314,15 +340,24 @@ export const TRANSACTION_INFERENCE_RULES = {
   /** 金额合理性校验 */
   amountSanityCheck(subcategory: string, amount: number): { valid: boolean; warning?: string } {
     const ranges: Record<string, [number, number]> = {
-      'cloud_server': [10, 100000],
-      'dashscope': [1, 10000],
-      'domain_hosting': [10, 5000],
-      'design_tool': [50, 10000],
-      'dev_tool': [50, 10000],
-      'ad_spend': [10, 100000],
-      'equipment': [100, 50000],
-      'meal': [5, 500],
-      'transport': [1, 2000],
+      '云服务器': [10, 100000],
+      '数据库': [10, 50000],
+      'CDN存储': [5, 10000],
+      '域名': [10, 5000],
+      'SSL证书': [10, 5000],
+      '通义千问': [1, 10000],
+      'DeepSeek': [1, 10000],
+      '其他AI': [1, 50000],
+      '设计工具': [50, 10000],
+      '开发工具': [50, 10000],
+      '办公工具': [10, 5000],
+      'AI工具': [50, 10000],
+      '广告投放': [10, 100000],
+      '设备采购': [100, 50000],
+      '办公用品': [5, 5000],
+      '通讯费': [10, 2000],
+      '餐饮': [5, 500],
+      '交通': [1, 2000],
     };
 
     const range = ranges[subcategory];
@@ -489,24 +524,28 @@ function isThisWeek(date: Date): boolean {
 /** 根据付款触发条件计算到期日 */
 export function calculateDueDate(trigger: string, startDate?: Date | null): Date {
   const base = startDate || new Date();
+  function eod(d: Date): Date {
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }
   switch (trigger) {
-    case 'sign': return new Date(base);
+    case 'sign': return eod(new Date(base));
     case 'design_confirm': {
       const d = new Date(base);
       d.setDate(d.getDate() + 14);
-      return d;
+      return eod(d);
     }
     case 'midterm': {
       const d = new Date(base);
       d.setDate(d.getDate() + 30);
-      return d;
+      return eod(d);
     }
     case 'delivery': {
       const d = new Date(base);
       d.setDate(d.getDate() + 45);
-      return d;
+      return eod(d);
     }
-    default: return new Date(base);
+    default: return eod(new Date(base));
   }
 }
 

@@ -28,6 +28,13 @@ export function formatDate(date: Date | string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// 将日期设为当天 23:59:59（收款截止时间）
+export function endOfDay(date: Date | string): Date {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
 // 手机号脱敏
 export function maskPhone(phone: string): string {
   if (phone.length !== 11) return phone;
