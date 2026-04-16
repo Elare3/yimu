@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import ClientForm from '@/components/business/ClientForm';
+import { toast } from '@/stores/toastStore';
 import { useClients } from '@/hooks/useClients';
 import { useProjects } from '@/hooks/useProjects';
 
@@ -46,8 +49,9 @@ const emptyItem: QuoteItem = { name: '', description: '', quantity: 1, unit: '�
 
 export default function QuoteForm({ initialData, onSubmit, onCancel, submitLabel = '创建报价' }: QuoteFormProps) {
   const [loading, setLoading] = useState(false);
-  const { clients } = useClients();
+  const { clients, mutate: mutateClients } = useClients();
   const [clientId, setClientId] = useState(initialData?.clientId || '');
+  const [showNewClient, setShowNewClient] = useState(false);
   const { projects } = useProjects(undefined, clientId || undefined);
   const [form, setForm] = useState({
     projectId: initialData?.projectId || '',
@@ -121,14 +125,25 @@ export default function QuoteForm({ initialData, onSubmit, onCancel, submitLabel
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* 基本信息 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Select
-          label="客户 *"
-          options={clientOptions}
-          placeholder="请选择客户"
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-          required
-        />
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm font-medium text-brown-800">客户 *</label>
+            <button
+              type="button"
+              onClick={() => setShowNewClient(true)}
+              className="text-xs text-caramel hover:text-caramel-dark font-medium transition-colors"
+            >
+              + 新建客户
+            </button>
+          </div>
+          <Select
+            options={clientOptions}
+            placeholder="请选择客户"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            required
+          />
+        </div>
         <Select
           label="关联项目"
           options={projectOptions}
@@ -297,6 +312,28 @@ export default function QuoteForm({ initialData, onSubmit, onCancel, submitLabel
           {submitLabel}
         </Button>
       </div>
+
+      <Modal isOpen={showNewClient} onClose={() => setShowNewClient(false)} title="新建客户" size="lg">
+        <ClientForm
+          onSubmit={async (data) => {
+            const res = await fetch('/api/clients', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data),
+            });
+            const result = await res.json();
+            if (result.success) {
+              toast.success('客户创建成功');
+              await mutateClients();
+              setClientId(result.data.id);
+              setShowNewClient(false);
+            } else {
+              toast.error(result.error || '创建失败');
+            }
+          }}
+          onCancel={() => setShowNewClient(false)}
+        />
+      </Modal>
     </form>
   );
 }

@@ -373,7 +373,25 @@ export function AIInsightWidget() {
       )}
 
       {/* 结果展示 */}
-      {!rulesLoading && data && (
+      {!rulesLoading && data && (() => {
+        const snap = data.dataSnapshot;
+        const hasData = snap && (
+          snap.monthIncome > 0 || snap.monthExpense > 0 ||
+          snap.lastMonthIncome > 0 || snap.lastMonthExpense > 0 ||
+          snap.activeProjects > 0 || snap.overdueCount > 0
+        );
+
+        if (!hasData && data.insights.length === 0) {
+          return (
+            <div className="text-center py-10">
+              <p className="text-3xl mb-3">📊</p>
+              <p className="text-brown-300 text-sm">暂无足够数据生成洞察</p>
+              <p className="text-brown-300/60 text-xs mt-1">开始记录项目和收支后，这里会自动显示经营分析</p>
+            </div>
+          );
+        }
+
+        return (
         <div className="space-y-5">
           {/* 健康指数 + 六维得分 */}
           <div className="flex items-start gap-6">
@@ -462,7 +480,8 @@ export function AIInsightWidget() {
             </p>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* 规则加载失败的空状态 */}
       {!rulesLoading && !data && (

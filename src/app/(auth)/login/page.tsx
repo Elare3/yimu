@@ -4,22 +4,24 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
-type Mode = 'code' | 'password';
+type Mode = 'password' | 'code';
 type Stage = 'input' | 'code' | 'success';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>('code');
+  const [mode, setMode] = useState<Mode>('password');
   const [stage, setStage] = useState<Stage>('input');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isRegister, setIsRegister] = useState(false);
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
-  // 倒计时
   useEffect(() => {
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
@@ -28,6 +30,7 @@ export default function LoginPage() {
   }, [countdown]);
 
   const isPhoneValid = /^1[3-9]\d{9}$/.test(phone);
+  const isPasswordValid = password.length >= 6 && password.length <= 64;
 
   const sendCode = () => {
     setError('');
@@ -76,13 +79,17 @@ export default function LoginPage() {
       codeRefs.current[0]?.focus();
       setLoading(false);
     } else {
-      localStorage.setItem('yimu_last_login', 'phone');
       setStage('success');
       setTimeout(() => router.push('/dashboard'), 1500);
     }
   }, [phone, router]);
 
-  const handlePasswordLogin = useCallback(async () => {
+  const handlePasswordSubmit = useCallback(async () => {
+    if (isRegister && password !== confirmPassword) {
+      setError('两次输入的密码不一致');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -93,14 +100,19 @@ export default function LoginPage() {
     });
 
     if (res?.error) {
-      setError(res.error);
+      if (res.error.includes('未设置密码')) {
+        setError('该手机号已通过验证码注册，请使用验证码登录后在设置中添加密码');
+      } else if (res.error.includes('密码错误')) {
+        setError('密码错误，请重试');
+      } else {
+        setError(res.error);
+      }
       setLoading(false);
     } else {
-      localStorage.setItem('yimu_last_login', 'password');
       setStage('success');
       setTimeout(() => router.push('/dashboard'), 1500);
     }
-  }, [phone, password, router]);
+  }, [phone, password, confirmPassword, isRegister, router]);
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -108,9 +120,21 @@ export default function LoginPage() {
     setStage('input');
     setCode(['', '', '', '', '', '']);
     setPassword('');
+    setConfirmPassword('');
+    setIsRegister(false);
+  };
+
+  const toggleRegister = () => {
+    setIsRegister(!isRegister);
+    setError('');
+    setConfirmPassword('');
   };
 
   const maskedPhone = phone ? `${phone.slice(0, 3)}****${phone.slice(7)}` : '';
+
+  const canSubmit = mode === 'password'
+    ? isPhoneValid && isPasswordValid && (!isRegister || confirmPassword.length >= 6)
+    : isPhoneValid;
 
   return (
     <div className="min-h-screen flex">
@@ -185,38 +209,23 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center px-6 lg:px-16 bg-cream-50">
         <div className="w-full max-w-[400px]">
 
-          {/* 登录方式切换 */}
-          {stage !== 'success' && (
-            <div className="flex gap-1 p-1 mb-8 bg-cream-100 rounded-[12px]">
-              <button
-                onClick={() => switchMode('code')}
-                className={`flex-1 py-2.5 rounded-[10px] text-sm font-medium transition-all ${
-                  mode === 'code' ? 'bg-white text-brown-800 shadow-sm' : 'text-brown-400'
-                }`}
-              >
-                验证码登录
-              </button>
-              <button
-                onClick={() => switchMode('password')}
-                className={`flex-1 py-2.5 rounded-[10px] text-sm font-medium transition-all ${
-                  mode === 'password' ? 'bg-white text-brown-800 shadow-sm' : 'text-brown-400'
-                }`}
-              >
-                账号密码登录
-              </button>
-            </div>
-          )}
-
           {/* ══════════ 输入阶段 ══════════ */}
           {stage === 'input' && (
             <div className="animate-fade-up">
               <h2 className="font-serif text-[30px] font-extrabold text-brown-800 mb-2">
-                欢迎回来
+                {mode === 'password'
+                  ? (isRegister ? '创建账号' : '欢迎使用')
+                  : '验证码登录'}
               </h2>
-              <p className="text-brown-500 text-[15px] mb-10">
-                {mode === 'code' ? '输入手机号，获取验证码登录' : '输入手机号和密码登录'}
+              <p className="text-brown-500 text-[15px] mb-8">
+                {mode === 'password'
+                  ? (isRegister
+                    ? '输入手机号和密码，即刻开始'
+                    : '输入手机号和密码登录')
+                  : '输入手机号，获取验证码登录'}
               </p>
 
+              {/* 手机号 */}
               <div className="mb-4">
                 <div
                   className="flex items-center bg-white rounded-[14px] border-[2px] transition-all duration-200"
@@ -234,71 +243,130 @@ export default function LoginPage() {
                       setPhone(e.target.value.replace(/\D/g, ''));
                       setError('');
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && isPhoneValid && mode === 'password') {
+                        passwordRef.current?.focus();
+                      }
+                    }}
                     placeholder="请输入手机号"
                     className="flex-1 px-3 py-4 bg-transparent font-serif text-[17px] tracking-[0.05em] text-brown-800 placeholder:text-brown-300 outline-none"
                   />
                 </div>
               </div>
 
+              {/* 密码 */}
               {mode === 'password' && (
-                <div className="mb-4">
-                  <div
-                    className="flex items-center bg-white rounded-[14px] border-[2px] transition-all duration-200"
-                    style={{
-                      borderColor: password ? '#C47D3F' : '#E8E0D4',
-                      boxShadow: password ? '0 0 0 4px rgba(196,125,63,0.12)' : 'none',
-                    }}
-                  >
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        setError('');
+                <>
+                  <div className="mb-4">
+                    <div
+                      className="flex items-center bg-white rounded-[14px] border-[2px] transition-all duration-200"
+                      style={{
+                        borderColor: password ? '#C47D3F' : '#E8E0D4',
+                        boxShadow: password ? '0 0 0 4px rgba(196,125,63,0.12)' : 'none',
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && isPhoneValid && password) {
-                          handlePasswordLogin();
-                        }
-                      }}
-                      placeholder="请输入密码"
-                      className="flex-1 px-4 py-4 bg-transparent text-[15px] text-brown-800 placeholder:text-brown-300 outline-none"
-                    />
+                    >
+                      <input
+                        ref={passwordRef}
+                        type="password"
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          setError('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && canSubmit && !isRegister) {
+                            handlePasswordSubmit();
+                          }
+                        }}
+                        placeholder={isRegister ? '设置密码（6-64位）' : '请输入密码'}
+                        className="flex-1 px-4 py-4 bg-transparent text-[15px] text-brown-800 placeholder:text-brown-300 outline-none"
+                      />
+                    </div>
                   </div>
-                </div>
+
+                  {/* 确认密码（注册模式） */}
+                  {isRegister && (
+                    <div className="mb-4 animate-fade-up">
+                      <div
+                        className="flex items-center bg-white rounded-[14px] border-[2px] transition-all duration-200"
+                        style={{
+                          borderColor: confirmPassword ? '#C47D3F' : '#E8E0D4',
+                          boxShadow: confirmPassword ? '0 0 0 4px rgba(196,125,63,0.12)' : 'none',
+                        }}
+                      >
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => {
+                            setConfirmPassword(e.target.value);
+                            setError('');
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && canSubmit) {
+                              handlePasswordSubmit();
+                            }
+                          }}
+                          placeholder="确认密码"
+                          className="flex-1 px-4 py-4 bg-transparent text-[15px] text-brown-800 placeholder:text-brown-300 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {error && (
                 <p className="text-danger text-sm mb-4">{error}</p>
               )}
 
+              {/* 提交按钮 */}
               <button
-                onClick={mode === 'code' ? sendCode : handlePasswordLogin}
-                disabled={!isPhoneValid || (mode === 'password' && !password) || loading}
+                onClick={mode === 'code' ? sendCode : handlePasswordSubmit}
+                disabled={!canSubmit || loading}
                 className="w-full py-4 rounded-button text-white font-semibold text-sm transition-all duration-200 disabled:cursor-not-allowed"
                 style={{
-                  background: isPhoneValid && (mode === 'code' || password)
+                  background: canSubmit
                     ? 'linear-gradient(135deg, #C47D3F, #D4956A)'
                     : '#F5EFE6',
-                  color: isPhoneValid && (mode === 'code' || password) ? '#fff' : '#B5AA9E',
-                  boxShadow: isPhoneValid && (mode === 'code' || password) ? '0 4px 16px rgba(196,125,63,0.3)' : 'none',
+                  color: canSubmit ? '#fff' : '#B5AA9E',
+                  boxShadow: canSubmit ? '0 4px 16px rgba(196,125,63,0.3)' : 'none',
                 }}
               >
-                {loading ? '登录中...' : mode === 'code' ? '获取验证码' : '登 录'}
+                {loading ? '请稍候...' : (
+                  mode === 'code' ? '获取验证码' : (isRegister ? '注册并登录' : '登 录')
+                )}
               </button>
 
+              {/* 底部切换 */}
               {mode === 'password' && (
-                <p className="text-center text-xs text-brown-400 mt-4">
-                  没有账号？使用
+                <div className="flex items-center justify-between mt-5">
+                  <button
+                    type="button"
+                    onClick={toggleRegister}
+                    className="text-sm text-caramel hover:text-caramel-dark transition-colors"
+                  >
+                    {isRegister ? '已有账号？去登录' : '没有账号？去注册'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => switchMode('code')}
-                    className="text-caramel hover:underline mx-1"
+                    className="text-sm text-brown-400 hover:text-brown-600 transition-colors"
                   >
                     验证码登录
                   </button>
-                  将自动注册
-                </p>
+                </div>
+              )}
+
+              {mode === 'code' && (
+                <div className="text-center mt-5">
+                  <button
+                    type="button"
+                    onClick={() => switchMode('password')}
+                    className="text-sm text-caramel hover:text-caramel-dark transition-colors"
+                  >
+                    使用密码登录
+                  </button>
+                </div>
               )}
 
               <p className="text-center text-xs text-brown-300 mt-8">
@@ -391,7 +459,7 @@ export default function LoginPage() {
                 </svg>
               </div>
               <h2 className="font-serif text-[28px] font-extrabold text-brown-800 mb-4">
-                欢迎回来！
+                {isRegister ? '注册成功！' : '欢迎回来！'}
               </h2>
               <div className="w-[200px] h-1 mx-auto bg-cream-100 rounded-full overflow-hidden">
                 <div
