@@ -182,6 +182,12 @@ export default function ProjectDetailPage() {
               <p className="text-brown-800 text-sm font-medium">{project.category}</p>
             </div>
           )}
+          {project.manager && (
+            <div>
+              <p className="text-brown-300 text-xs mb-1">主要负责人</p>
+              <p className="text-brown-800 text-sm font-medium">{project.manager}</p>
+            </div>
+          )}
           {project.startDate && (
             <div>
               <p className="text-brown-300 text-xs mb-1">开始日期</p>

@@ -54,6 +54,7 @@ export async function PUT(
       description,
       priority,
       category,
+      manager,
       totalAmount,
       startDate,
       deadline,
@@ -70,6 +71,7 @@ export async function PUT(
     if (description !== undefined) updateData.description = description;
     if (priority !== undefined) updateData.priority = priority;
     if (category !== undefined) updateData.category = category;
+    if (manager !== undefined) updateData.manager = manager;
     if (totalAmount !== undefined) updateData.totalAmount = parseFloat(totalAmount);
     if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
     if (deadline !== undefined) updateData.deadline = deadline ? new Date(deadline) : null;
@@ -137,6 +139,18 @@ export async function DELETE(
       where: { projectId: params.id, userId },
       data: { projectId: null },
     });
+
+    // 回滚客户统计：扣减已收金额和项目数
+    if (existing.clientId) {
+      const decrements: Record<string, unknown> = { projectCount: { decrement: 1 } };
+      if (existing.paidAmount > 0) {
+        decrements.totalRevenue = { decrement: existing.paidAmount };
+      }
+      await prisma.client.update({
+        where: { id: existing.clientId },
+        data: decrements,
+      });
+    }
 
     // 删除项目
     await prisma.project.delete({

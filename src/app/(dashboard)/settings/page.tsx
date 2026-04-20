@@ -336,20 +336,20 @@ export default function SettingsPage() {
         {/* 装饰背景 */}
         <div className="absolute inset-0 h-28" style={{ background: 'linear-gradient(135deg, #C47D3F12 0%, #D4940E08 50%, #5B8C5A08 100%)' }} />
 
-        <div className="relative px-6 pt-8 pb-6 flex items-end gap-5">
+        <div className="relative px-4 sm:px-6 pt-6 sm:pt-8 pb-5 sm:pb-6 flex items-end gap-3 sm:gap-5">
           {/* 头像 */}
           <div className="relative group shrink-0">
             {profile?.avatarUrl ? (
               <Image src={profile.avatarUrl} alt="头像" width={80} height={80}
-                className="w-20 h-20 rounded-[18px] object-cover ring-4 ring-white shadow-sm" />
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-[14px] sm:rounded-[18px] object-cover ring-4 ring-white shadow-sm" />
             ) : (
-              <div className="w-20 h-20 rounded-[18px] ring-4 ring-white shadow-sm flex items-center justify-center text-white text-2xl font-bold font-serif"
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[14px] sm:rounded-[18px] ring-4 ring-white shadow-sm flex items-center justify-center text-white text-xl sm:text-2xl font-bold font-serif"
                 style={{ background: 'linear-gradient(135deg, #C47D3F, #D4940E)' }}>
                 {userName.charAt(0)}
               </div>
             )}
             {avatarUploading && (
-              <div className="absolute inset-0 rounded-[18px] bg-black/40 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-[14px] sm:rounded-[18px] bg-black/40 flex items-center justify-center">
                 <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
               </div>
             )}
@@ -359,7 +359,7 @@ export default function SettingsPage() {
                 <button
                   onClick={handleAvatarRemove}
                   title="移除头像"
-                  className="w-7 h-7 rounded-full bg-white border border-cream-300 shadow-sm flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition-colors opacity-0 group-hover:opacity-100"
+                  className="w-7 h-7 rounded-full bg-white border border-cream-300 shadow-sm flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
                 >
                   <svg className="w-3.5 h-3.5 text-brown-400 hover:text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -397,17 +397,17 @@ export default function SettingsPage() {
           </div>
 
           {/* 右侧状态 */}
-          <div className="hidden sm:flex flex-col items-end gap-2 shrink-0 pb-0.5">
+          <div className="flex flex-col items-end gap-1.5 sm:gap-2 shrink-0 pb-0.5">
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs text-brown-300 hover:text-red-500 hover:bg-red-50 border border-cream-300 hover:border-red-200 transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:py-1 rounded-full text-xs text-brown-300 hover:text-red-500 hover:bg-red-50 border border-cream-300 hover:border-red-200 transition-all"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               退出
             </button>
-            <div className="flex items-center gap-3 text-xs">
+            <div className="hidden sm:flex items-center gap-3 text-xs">
               {hasPhone && (
                 <span className="text-brown-400 font-mono">{maskedPhone}</span>
               )}
@@ -416,9 +416,26 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* ═══ 移动端标签横滚 ═══ */}
+      <div className="md:hidden -mx-4 px-4 overflow-x-auto flex gap-2 pb-2 mb-4">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`shrink-0 px-4 py-2.5 rounded-full text-sm font-medium transition-all ${
+              activeTab === tab.id
+                ? 'bg-white text-brown-800 shadow-sm border border-cream-200'
+                : 'text-brown-400 hover:text-brown-700 bg-cream-100/60'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* ═══ 标签页 + 内容 ═══ */}
       <div className="flex gap-6">
-        {/* 左侧导航 */}
+        {/* 左侧导航（PC端） */}
         <nav className="hidden md:block w-48 shrink-0">
           <div className="sticky top-24 space-y-1">
             {TABS.map(tab => (
@@ -441,23 +458,6 @@ export default function SettingsPage() {
             ))}
           </div>
         </nav>
-
-        {/* 移动端标签横滚 */}
-        <div className="md:hidden w-full mb-4 -mx-4 px-4 overflow-x-auto flex gap-2 pb-2">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                activeTab === tab.id
-                  ? 'bg-white text-brown-800 shadow-sm border border-cream-200'
-                  : 'text-brown-400 hover:text-brown-700'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
 
         {/* 右侧内容 */}
         <div className="flex-1 min-w-0 space-y-5">
@@ -792,7 +792,7 @@ export default function SettingsPage() {
               </Section>
 
               {/* 危险区域 */}
-              <div className="bg-white rounded-card border-[1.5px] border-red-100 p-5">
+              <div className="bg-white rounded-card border-[1.5px] border-red-100 p-4 sm:p-5">
                 <h3 className="text-sm font-semibold text-red-600 mb-1">危险操作</h3>
                 <p className="text-xs text-brown-400 mb-4">删除账号后，所有数据将被永久清除且无法恢复。</p>
 
@@ -830,12 +830,12 @@ export default function SettingsPage() {
 
 function Section({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-card border-[1.5px] border-cream-300 p-5">
-      <div className="mb-4">
+    <div className="bg-white rounded-card border-[1.5px] border-cream-300 p-4 sm:p-5">
+      <div className="mb-3 sm:mb-4">
         <h3 className="text-sm font-semibold text-brown-800">{title}</h3>
         {desc && <p className="text-xs text-brown-400 mt-0.5">{desc}</p>}
       </div>
-      <div className="space-y-4">{children}</div>
+      <div className="space-y-3 sm:space-y-4">{children}</div>
     </div>
   );
 }

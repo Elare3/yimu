@@ -108,6 +108,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const existing = await prisma.client.findFirst({ where: { id: params.id, userId } });
     if (!existing) return errorResponse('客户不存在', 404);
 
+    const finalPhone = (body.phone ?? (existing.phone || '')).trim();
+    const finalEmail = (body.email ?? (existing.email || '')).trim();
+    if (!finalPhone && !finalEmail) {
+      return errorResponse('电话和邮箱至少填写一项');
+    }
+
     const client = await prisma.client.update({
       where: { id: params.id },
       data: {

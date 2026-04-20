@@ -39,6 +39,7 @@ export default function ProjectForm({ projectId, onSubmit, onCancel }: ProjectFo
     description: '',
     priority: 'medium',
     category: '',
+    manager: '',
     totalAmount: '',
     startDate: '',
     deadline: '',
@@ -61,6 +62,7 @@ export default function ProjectForm({ projectId, onSubmit, onCancel }: ProjectFo
               description: p.description || '',
               priority: p.priority || 'medium',
               category: p.category || '',
+              manager: p.manager || '',
               totalAmount: p.totalAmount ? String(p.totalAmount) : '',
               startDate: p.startDate ? p.startDate.split('T')[0] : '',
               deadline: p.deadline ? p.deadline.split('T')[0] : '',
@@ -126,6 +128,12 @@ export default function ProjectForm({ projectId, onSubmit, onCancel }: ProjectFo
           options={CATEGORY_OPTIONS}
           value={form.category}
           onChange={(e) => handleChange('category', e.target.value)}
+        />
+        <Input
+          label="主要负责人"
+          placeholder="项目负责人姓名"
+          value={form.manager}
+          onChange={(e) => handleChange('manager', e.target.value)}
         />
         <Input
           label="项目金额 (¥)"

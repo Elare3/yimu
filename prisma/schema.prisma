@@ -81,6 +81,7 @@ model Project {
   status        String        @default("quoted") // quoted|in_progress|review|completed|cancelled
   priority      String        @default("medium") // low|medium|high
   category      String        @default("")
+  manager       String        @default("")
   totalAmount   Float         @default(0)
   paidAmount    Float         @default(0)
   startDate     DateTime?

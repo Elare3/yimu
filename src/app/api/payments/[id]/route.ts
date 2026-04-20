@@ -20,6 +20,22 @@ export async function PUT(
       const amount = parseFloat(body.amount);
       if (!Number.isFinite(amount) || amount <= 0) return errorResponse('金额无效', 400);
       updateData.amount = amount;
+
+      // 如果已收款节点修改金额，同步项目paidAmount和客户totalRevenue
+      if (existing.status === 'paid' && amount !== existing.paidAmount) {
+        const diff = amount - existing.paidAmount;
+        await prisma.project.update({
+          where: { id: existing.projectId },
+          data: { paidAmount: { increment: diff } },
+        });
+        if (existing.clientId) {
+          await prisma.client.update({
+            where: { id: existing.clientId },
+            data: { totalRevenue: { increment: diff } },
+          });
+        }
+        updateData.paidAmount = amount;
+      }
     }
     if (body.dueDate !== undefined) {
       const date = new Date(body.dueDate);

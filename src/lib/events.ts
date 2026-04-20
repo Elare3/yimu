@@ -64,14 +64,35 @@ on('quote.accepted', async ({ quoteId, userId }) => {
   });
   if (!quote) return;
 
-  // 如果已经关联项目，仅推进状态
+  // 如果已经关联项目，推进状态并创建收款节点
   if (quote.projectId) {
     const existingProject = await prisma.project.findUnique({ where: { id: quote.projectId } });
-    if (existingProject && existingProject.status === 'quoted') {
+    if (existingProject && ['draft', 'quoted'].includes(existingProject.status)) {
       await prisma.project.update({
         where: { id: quote.projectId },
-        data: { status: 'quoted', totalAmount: quote.total },
+        data: { status: 'in_progress', totalAmount: quote.total, startDate: existingProject.startDate || new Date() },
       });
+
+      // 检查是否已有收款节点，没有则自动创建
+      const existingNodes = await prisma.paymentNode.count({ where: { projectId: quote.projectId } });
+      if (existingNodes === 0 && quote.total > 0) {
+        const rule = PAYMENT_SPLIT_RULES.getPlan(quote.total);
+        const splits = PAYMENT_SPLIT_RULES.creditAdjustment('normal', rule.splits);
+        const startDate = existingProject.startDate || new Date();
+        for (const split of splits) {
+          await prisma.paymentNode.create({
+            data: {
+              userId,
+              projectId: quote.projectId,
+              clientId: quote.clientId,
+              name: split.label,
+              amount: Math.round(quote.total * split.percent / 100),
+              dueDate: calculateDueDate(split.trigger, startDate),
+              status: 'pending',
+            },
+          });
+        }
+      }
     }
     return;
   }
@@ -140,13 +161,7 @@ on('project.status_changed', async ({ projectId, userId, from, to }) => {
         }
 
         case 'updateClientTotalRevenue': {
-          const project = await prisma.project.findUnique({ where: { id: projectId } });
-          if (project) {
-            await prisma.client.update({
-              where: { id: project.clientId },
-              data: { totalRevenue: { increment: project.paidAmount } },
-            });
-          }
+          // totalRevenue already incremented per-payment in paid/route.ts — no-op here
           break;
         }
 
@@ -221,37 +236,8 @@ on('project.status_changed', async ({ projectId, userId, from, to }) => {
 });
 
 
-// ── 收款到账 → 自动记一笔收入 + 更新项目paidAmount + 税务预警 ──
-on('payment.received', async ({ paymentNodeId, userId, amount }) => {
-  const node = await prisma.paymentNode.findUnique({
-    where: { id: paymentNodeId },
-    include: { project: true, client: true },
-  });
-  if (!node) return;
-
-  // 自动创建收入记录
-  await prisma.transaction.create({
-    data: {
-      userId,
-      type: 'income',
-      amount,
-      category: '项目收入',
-      subcategory: node.project?.category || '其他服务',
-      description: `${node.client?.name || '客户'} - ${node.project?.name || '项目'} - ${node.name}`,
-      projectId: node.projectId,
-      clientId: node.clientId,
-      date: new Date(),
-      paymentMethod: 'bank_transfer',
-      isBusiness: true,
-    },
-  });
-
-  // 更新项目已收金额
-  await prisma.project.update({
-    where: { id: node.projectId },
-    data: { paidAmount: { increment: amount } },
-  });
-
+// ── 收款到账 → 税务预警检查（收入记录和 paidAmount 已在 paid/route.ts 事务中完成） ──
+on('payment.received', async ({ userId }) => {
   // 检查税务阈值
   const monthlyIncome = await getMonthlyIncome(userId);
   const quarterlyIncome = await getQuarterlyIncome(userId);
@@ -346,9 +332,9 @@ async function getMonthlyIncome(userId: string): Promise<number> {
 async function getQuarterlyIncome(userId: string): Promise<number> {
   const now = new Date();
   const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const quarterEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 1);
   const result = await prisma.transaction.aggregate({
-    where: { userId, type: 'income', date: { gte: quarterStart, lt: monthEnd } },
+    where: { userId, type: 'income', date: { gte: quarterStart, lt: quarterEnd } },
     _sum: { amount: true },
   });
   return result._sum.amount || 0;

@@ -14,7 +14,8 @@
 body {
   color: var(--text);
   background: var(--bg);
-  font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', 'Roboto', system-ui, sans-serif;
+  overscroll-behavior: none;
 }
 
 /* 页面切换淡入上滑 — 快速版，减少感知延迟 */
@@ -51,10 +52,31 @@ body {
 
   input, textarea, select {
     font-size: 16px !important;
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 0;
+  }
+
+  select {
+    border-radius: 10px;
   }
 
   body {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    overflow-x: hidden;
+  }
+}
+
+/* 安卓滚动优化 */
+.overflow-y-auto,
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 安卓输入法弹出时防止布局跳动 */
+@supports (-webkit-touch-callout: none) or (pointer: coarse) {
+  .fixed.bottom-0 {
+    transition: transform 0.2s ease;
   }
 }

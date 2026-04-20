@@ -52,8 +52,11 @@ export default function ClientForm({ clientId, onSubmit, onCancel }: ClientFormP
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const needContact = !form.phone.trim() && !form.email.trim();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (needContact) return;
     setLoading(true);
     try {
       await onSubmit({
@@ -84,13 +87,13 @@ export default function ClientForm({ clientId, onSubmit, onCancel }: ClientFormP
           onChange={(e) => handleChange('contactPerson', e.target.value)}
         />
         <Input
-          label="电话"
+          label={`电话${!form.email.trim() ? ' *' : ''}`}
           placeholder="联系电话"
           value={form.phone}
           onChange={(e) => handleChange('phone', e.target.value)}
         />
         <Input
-          label="邮箱"
+          label={`邮箱${!form.phone.trim() ? ' *' : ''}`}
           type="email"
           placeholder="email@example.com"
           value={form.email}
@@ -134,11 +137,15 @@ export default function ClientForm({ clientId, onSubmit, onCancel }: ClientFormP
         />
       </div>
 
+      {needContact && (
+        <p className="text-sm text-amber-600">电话和邮箱至少填写一项</p>
+      )}
+
       <div className="flex justify-end gap-3 pt-2">
         <Button variant="secondary" type="button" onClick={onCancel}>
           取消
         </Button>
-        <Button type="submit" loading={loading}>
+        <Button type="submit" loading={loading} disabled={needContact}>
           {clientId ? '保存修改' : '创建客户'}
         </Button>
       </div>

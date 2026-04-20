@@ -213,6 +213,7 @@ export default function PaymentsPage() {
               paidAt?: string | null;
               paidAmount: number;
               reminderCount: number;
+              notes?: string;
               project?: { id: string; name: string } | null;
               client?: { id: string; name: string; contactPerson?: string } | null;
             }) => (
@@ -222,6 +223,7 @@ export default function PaymentsPage() {
                 onMarkPaid={handleMarkPaid}
                 onRemind={handleRemind}
                 onDelete={(id) => setDeletingId(id)}
+                onUpdate={() => mutate()}
                 remindLoading={remindLoading === node.id}
               />
             ))}

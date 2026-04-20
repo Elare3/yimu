@@ -77,6 +77,10 @@ export async function POST(req: Request) {
       return errorResponse('客户名称不能为空');
     }
 
+    if (!phone?.trim() && !email?.trim()) {
+      return errorResponse('电话和邮箱至少填写一项');
+    }
+
     const client = await prisma.client.create({
       data: {
         userId,
