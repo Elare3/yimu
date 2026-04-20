@@ -405,7 +405,7 @@ export function AIInsightWidget() {
 
           {/* 数据快照 */}
           {data.dataSnapshot && (
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <SnapshotItem
                 label="本月收入"
                 value={formatAmount(data.dataSnapshot.monthIncome)}

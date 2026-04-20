@@ -7,7 +7,7 @@ import { SWRProvider } from '@/components/providers/SWRProvider';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <SWRProvider>
-      <div className="min-h-screen bg-cream-50 flex">
+      <div className="min-h-[100dvh] bg-cream-50 flex">
         {/* PC 侧边栏 */}
         <Sidebar />
 

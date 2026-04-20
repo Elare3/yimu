@@ -88,7 +88,7 @@ export default function FinancePage() {
     <div className="space-y-6">
       {/* 月度汇总卡片 */}
       {!summaryLoading && summary && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <div className="bg-white rounded-card border-[1.5px] border-cream-300 p-4">
             <p className="text-brown-300 text-xs mb-1">总收入</p>
             <p className="font-serif text-xl font-bold text-caramel">{formatAmount(summary.allTimeIncome || 0)}</p>
@@ -294,7 +294,7 @@ export default function FinancePage() {
                         <span className="text-xs text-brown-300">预算 {formatAmount(pg.projectBudget)}</span>
                       )}
                     </div>
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                       <div>
                         <p className="text-xs text-brown-300 mb-0.5">收入</p>
                         <p className="font-serif font-bold text-olive">{formatAmount(pg.income)}</p>

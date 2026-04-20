@@ -71,7 +71,7 @@ function KanbanColumn({ status, projects, onProjectClick }: { status: string; pr
     <div
       ref={setNodeRef}
       className={[
-        'flex flex-col min-w-[280px] max-w-[320px] flex-1 rounded-[16px] p-3',
+        'flex flex-col min-w-0 md:min-w-[280px] md:max-w-[320px] flex-1 rounded-[16px] p-3',
         style.bg,
         isOver ? 'ring-2 ring-caramel/30' : '',
         'transition-all duration-200',
@@ -156,13 +156,13 @@ export default function KanbanBoard({ columns, onStatusChange, onProjectClick, c
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
+      <div className="flex flex-col md:flex-row gap-4 md:overflow-x-auto pb-4 md:min-h-[400px]">
         {KANBAN_STATUSES.map((status) => (
           <KanbanColumn key={status} status={status} projects={columns[status] || []} onProjectClick={onProjectClick} />
         ))}
 
         {/* 已完成列 — 固定入口卡片 */}
-        <div className="flex flex-col min-w-[280px] max-w-[320px] flex-1 rounded-[16px] p-3 bg-[#F3F1ED]/50">
+        <div className="flex flex-col min-w-0 md:min-w-[280px] md:max-w-[320px] flex-1 rounded-[16px] p-3 bg-[#F3F1ED]/50">
           <div className="flex items-center gap-2 mb-3 px-1">
             <span className="relative flex items-center justify-center">
               <span className="absolute w-4 h-4 rounded-full opacity-20" style={{ backgroundColor: '#8BA88B' }} />
@@ -198,7 +198,7 @@ export default function KanbanBoard({ columns, onStatusChange, onProjectClick, c
       </div>
       <DragOverlay>
         {activeProject ? (
-          <div className="w-[300px]">
+          <div className="w-[80vw] md:w-[300px]">
             <ProjectCard project={activeProject} isDragging />
           </div>
         ) : null}

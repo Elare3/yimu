@@ -96,7 +96,7 @@ export default function NotificationPanel({ open, onClose }: NotificationPanelPr
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 top-full mt-2 w-[380px] max-h-[480px] bg-white rounded-card border-[1.5px] border-cream-300 shadow-[0_12px_40px_rgba(44,36,32,0.12)] overflow-hidden z-50 animate-in"
+      className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-[380px] max-h-[480px] bg-white rounded-card border-[1.5px] border-cream-300 shadow-[0_12px_40px_rgba(44,36,32,0.12)] overflow-hidden z-50 animate-in"
       style={{ animation: 'fadeUp 0.15s ease-out' }}
     >
       {/* 头部 */}

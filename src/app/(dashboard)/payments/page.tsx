@@ -169,13 +169,13 @@ export default function PaymentsPage() {
     <div className="space-y-6">
       {/* 工具栏 */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex gap-1 bg-cream-100 rounded-button p-1">
+        <div className="flex gap-1 bg-cream-100 rounded-button p-1 overflow-x-auto">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.value}
               onClick={() => setStatusFilter(tab.value)}
               className={[
-                'px-3 py-1.5 rounded-[10px] text-sm font-medium transition-all duration-200',
+                'px-3 py-1.5 rounded-[10px] text-sm font-medium transition-all duration-200 whitespace-nowrap',
                 statusFilter === tab.value
                   ? 'bg-white text-brown-800 shadow-sm'
                   : 'text-brown-300 hover:text-brown-500',

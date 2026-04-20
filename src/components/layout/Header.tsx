@@ -103,7 +103,7 @@ function HeaderInner() {
 
   return (
     <header
-      className="sticky top-0 z-30 px-6 lg:px-8 py-4"
+      className="sticky top-0 z-30 px-4 sm:px-6 lg:px-8 py-3 sm:py-4"
       style={{
         background: 'linear-gradient(180deg, #FAF6F0 60%, transparent)',
         backdropFilter: 'blur(8px)',
@@ -112,8 +112,8 @@ function HeaderInner() {
       <div className="flex items-center justify-between">
         {/* 左侧：标题 + 日期问候 */}
         <div>
-          <h1 className="font-serif text-2xl font-extrabold text-brown-800">{title}</h1>
-          <p className="text-brown-300 text-sm mt-0.5">
+          <h1 className="font-serif text-xl sm:text-2xl font-extrabold text-brown-800">{title}</h1>
+          <p className="text-brown-300 text-xs sm:text-sm mt-0.5 truncate max-w-[60vw] sm:max-w-none">
             {formatToday()} · {getGreeting()}
           </p>
         </div>

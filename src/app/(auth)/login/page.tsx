@@ -137,7 +137,7 @@ export default function LoginPage() {
     : isPhoneValid;
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-[100dvh] flex">
       {/* 左侧品牌面板 */}
       <div
         className="hidden lg:flex lg:w-[28%] relative overflow-hidden flex-col justify-between p-12"
@@ -206,7 +206,7 @@ export default function LoginPage() {
       </div>
 
       {/* 右侧登录表单 */}
-      <div className="flex-1 flex items-center justify-center px-6 lg:px-16 bg-cream-50">
+      <div className="flex-1 flex items-center justify-center px-5 sm:px-6 lg:px-16 bg-cream-50">
         <div className="w-full max-w-[400px]">
 
           {/* ══════════ 输入阶段 ══════════ */}
@@ -479,7 +479,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div className="fixed bottom-6 right-8 text-brown-300 text-xs">
+          <div className="hidden lg:block fixed bottom-6 right-8 text-brown-300 text-xs">
             一木 v1.0 · Made with ☕
           </div>
         </div>

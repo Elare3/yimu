@@ -41,7 +41,8 @@
       "Bash(echo \"exit=$?\")",
       "Bash(wait)",
       "Bash(kill -0 1031)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(grep -rn \"max-w\\\\|w-\\\\[.*px\\\\]\\\\|fixed.*width\\\\|w-full\" /d/yimu/src/app -type f --include=\"*.tsx\")"
     ]
   }
 }

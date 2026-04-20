@@ -87,7 +87,7 @@ function ToastItem({
       className={[
         'flex items-start gap-3 px-4 py-3',
         'rounded-button border shadow-lg',
-        'min-w-[300px] max-w-[420px]',
+        'w-[calc(100vw-2rem)] sm:min-w-[300px] sm:max-w-[420px]',
         typeStyles[type],
         exiting
           ? 'animate-[toastOut_0.2s_ease_forwards]'
@@ -128,7 +128,7 @@ function ToastContainer() {
     <div
       aria-live="polite"
       aria-label="Notifications"
-      className="fixed top-4 right-4 z-[100] flex flex-col gap-2"
+      className="fixed top-4 left-4 right-4 sm:left-auto z-[100] flex flex-col gap-2"
     >
       {toasts.map((t) => (
         <ToastItem key={t.id} id={t.id} type={t.type} message={t.message} />

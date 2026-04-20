@@ -1,10 +1,26 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import SessionProvider from "@/components/providers/SessionProvider";
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+};
 
 export const metadata: Metadata = {
   title: "一木 YiMu - 你的经营伙伴",
   description: "一人成木，独木成林。为OPC创业者打造的经营伙伴。",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: '一木 YiMu',
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export default function RootLayout({

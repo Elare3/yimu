@@ -62,7 +62,7 @@ function Modal({
         aria-modal="true"
         aria-label={title}
         className={[
-          'relative z-10 w-full bg-white',
+          'relative z-10 w-full mx-4 sm:mx-auto bg-white',
           'rounded-t-card sm:rounded-card',
           'shadow-xl',
           'animate-[slideUp_0.3s_ease]',
@@ -75,7 +75,7 @@ function Modal({
             <h2 className="text-lg font-semibold text-brown-800">{title}</h2>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-brown-300 hover:text-brown-800 hover:bg-cream-100 transition-colors"
+              className="p-2.5 rounded-lg text-brown-300 hover:text-brown-800 hover:bg-cream-100 transition-colors"
               aria-label="Close dialog"
             >
               <svg

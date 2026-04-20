@@ -57,7 +57,7 @@ function SkeletonSummaryCard() {
 /** 看板列骨架 */
 function SkeletonKanbanColumn() {
   return (
-    <div className="min-w-[260px] w-[280px] shrink-0">
+    <div className="min-w-0 md:min-w-[260px] md:w-[280px] shrink-0">
       <div className="flex items-center gap-2 mb-3 px-1">
         <Skeleton circle className="h-3 w-3" />
         <Skeleton className="h-4 w-16" />
