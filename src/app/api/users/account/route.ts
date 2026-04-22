@@ -16,9 +16,11 @@ export async function DELETE(req: Request) {
     // 级联删除所有关联数据（顺序：先删子表，再删主表）
     await Promise.all([
       prisma.aICallLog.deleteMany({ where: { userId } }),
+      prisma.aIAuditLog.deleteMany({ where: { userId } }),
       prisma.businessMemory.deleteMany({ where: { userId } }),
       prisma.pricingFeedback.deleteMany({ where: { userId } }),
       prisma.activityLog.deleteMany({ where: { userId } }),
+      prisma.feedback.deleteMany({ where: { userId } }),
     ]);
 
     // 删除有外键依赖的表

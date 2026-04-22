@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
+import { PROJECT_STATE_MACHINE } from '@/lib/rules';
+import { emit } from '@/lib/events';
 
 // POST /api/projects/batch — 批量操作项目
 // body: { action: 'delete'|'status'|'tag', ids: string[], value?: string }
@@ -20,16 +22,26 @@ export async function POST(req: Request) {
       return errorResponse('部分项目不存在或无权操作');
     }
 
-    const result: { affected: number } = { affected: 0 };
+    const result: { affected: number; skipped?: number } = { affected: 0 };
 
     switch (action) {
       case 'delete': {
-        // 批量取消（软删除）
-        const updated = await prisma.project.updateMany({
+        // 批量取消（软删除）：按单项走状态机，跳过不可取消的（如 completed）
+        const projects = await prisma.project.findMany({
           where: { id: { in: ids }, userId },
-          data: { status: 'cancelled' },
+          select: { id: true, status: true },
         });
-        result.affected = updated.count;
+        let affected = 0;
+        let skipped = 0;
+        for (const p of projects) {
+          if (p.status === 'cancelled') { skipped++; continue; }
+          if (!PROJECT_STATE_MACHINE.canTransition(p.status, 'cancelled')) { skipped++; continue; }
+          await prisma.project.update({ where: { id: p.id }, data: { status: 'cancelled' } });
+          await emit('project.status_changed', { projectId: p.id, userId, from: p.status, to: 'cancelled' });
+          affected++;
+        }
+        result.affected = affected;
+        if (skipped) result.skipped = skipped;
         break;
       }
       case 'status': {
@@ -37,15 +49,26 @@ export async function POST(req: Request) {
         const validStatuses = ['quoted', 'in_progress', 'review', 'completed', 'cancelled'];
         if (!validStatuses.includes(value)) return errorResponse('无效的状态');
 
-        const updateData: Record<string, unknown> = { status: value };
-        if (value === 'completed') updateData.completedAt = new Date();
-        if (value === 'in_progress') updateData.startDate = new Date();
-
-        const updated = await prisma.project.updateMany({
+        // 按单项走状态机校验，跳过不允许的转换；避免覆盖已有的 startDate/completedAt
+        const projects = await prisma.project.findMany({
           where: { id: { in: ids }, userId },
-          data: updateData,
+          select: { id: true, status: true, startDate: true },
         });
-        result.affected = updated.count;
+        let affected = 0;
+        let skipped = 0;
+        for (const p of projects) {
+          if (p.status === value) { skipped++; continue; }
+          if (!PROJECT_STATE_MACHINE.canTransition(p.status, value)) { skipped++; continue; }
+          const updateData: Record<string, unknown> = { status: value };
+          if (value === 'in_progress' && !p.startDate) updateData.startDate = new Date();
+          if (value === 'completed') updateData.completedAt = new Date();
+          if (value === 'quoted' && p.status === 'cancelled') updateData.completedAt = null;
+          await prisma.project.update({ where: { id: p.id }, data: updateData });
+          await emit('project.status_changed', { projectId: p.id, userId, from: p.status, to: value });
+          affected++;
+        }
+        result.affected = affected;
+        if (skipped) result.skipped = skipped;
         break;
       }
       case 'tag': {

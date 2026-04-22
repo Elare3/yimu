@@ -64,10 +64,6 @@ export async function POST(req: Request) {
     const client = await prisma.client.findFirst({ where: { id: clientId, userId } });
     if (!client) return errorResponse('客户不存在');
 
-    // 生成报价编号
-    const count = await prisma.quote.count({ where: { userId } });
-    const quoteNumber = `Q${new Date().getFullYear()}${String(count + 1).padStart(4, '0')}`;
-
     // 计算金额
     const processedItems = items.map((item: { quantity: number; unitPrice: number; name: string; description?: string; unit?: string }) => ({
       name: item.name,
@@ -84,28 +80,44 @@ export async function POST(req: Request) {
     const discountAmount = discount || 0;
     const total = subtotal + taxAmount - discountAmount;
 
-    const quote = await prisma.quote.create({
-      data: {
-        userId,
-        clientId,
-        projectId: projectId || null,
-        quoteNumber,
-        title,
-        items: processedItems,
-        subtotal,
-        taxRate: rate,
-        taxAmount,
-        discount: discountAmount,
-        total,
-        paymentTerms: paymentTerms || '',
-        validUntil: validUntil ? new Date(validUntil) : null,
-        notes: notes || '',
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        project: { select: { id: true, name: true } },
-      },
-    });
+    // 生成报价编号：count+N 并在唯一约束冲突时重试，避免并发创建时的竞态
+    const year = new Date().getFullYear();
+    const baseCount = await prisma.quote.count({ where: { userId } });
+
+    let quote;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const quoteNumber = `Q${year}${String(baseCount + 1 + attempt).padStart(4, '0')}`;
+      try {
+        quote = await prisma.quote.create({
+          data: {
+            userId,
+            clientId,
+            projectId: projectId || null,
+            quoteNumber,
+            title,
+            items: processedItems,
+            subtotal,
+            taxRate: rate,
+            taxAmount,
+            discount: discountAmount,
+            total,
+            paymentTerms: paymentTerms || '',
+            validUntil: validUntil ? new Date(validUntil) : null,
+            notes: notes || '',
+          },
+          include: {
+            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
+          },
+        });
+        break;
+      } catch (err) {
+        // Prisma 唯一约束冲突：编号被并发创建抢占，尝试下一个
+        const isUniqueViolation =
+          typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 'P2002';
+        if (!isUniqueViolation || attempt === 4) throw err;
+      }
+    }
 
     return successResponse(quote);
   } catch (e) {

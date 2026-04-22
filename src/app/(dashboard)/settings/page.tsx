@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import useSWR from 'swr';
-import Image from 'next/image';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -340,7 +339,8 @@ export default function SettingsPage() {
           {/* 头像 */}
           <div className="relative group shrink-0">
             {profile?.avatarUrl ? (
-              <Image src={profile.avatarUrl} alt="头像" width={80} height={80}
+              <img // eslint-disable-line @next/next/no-img-element
+                src={profile.avatarUrl} alt="头像" width={80} height={80}
                 className="w-16 h-16 sm:w-20 sm:h-20 rounded-[14px] sm:rounded-[18px] object-cover ring-4 ring-white shadow-sm" />
             ) : (
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[14px] sm:rounded-[18px] ring-4 ring-white shadow-sm flex items-center justify-center text-white text-xl sm:text-2xl font-bold font-serif"

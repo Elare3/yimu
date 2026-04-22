@@ -20,7 +20,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
 import ProjectCard from './ProjectCard';
-import { STATUS_LABELS } from '@/lib/utils';
+import { STATUS_LABELS, STATUS_TRANSITIONS } from '@/lib/utils';
+import { Modal } from '@/components/ui/Modal';
 
 interface ProjectItem {
   id: string;
@@ -52,18 +53,56 @@ const COLUMN_STYLES: Record<string, { bg: string; dot: string; header: string }>
 
 const KANBAN_STATUSES = ['quoted', 'in_progress', 'review'];
 
-function SortableProjectCard({ project, onClick }: { project: ProjectItem; onClick: () => void }) {
+function SortableProjectCard({
+  project,
+  onClick,
+  onMobileMove,
+}: {
+  project: ProjectItem;
+  onClick: () => void;
+  onMobileMove: (project: ProjectItem) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: project.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <ProjectCard project={project} onClick={onClick} isDragging={isDragging} />
+    <div ref={setNodeRef} style={style} className="relative">
+      {/* 桌面端：整张卡片可拖拽 */}
+      <div className="hidden md:block" {...attributes} {...listeners}>
+        <ProjectCard project={project} onClick={onClick} isDragging={isDragging} />
+      </div>
+      {/* 移动端：不启用拖拽，改为显式"换列"按钮 */}
+      <div className="md:hidden">
+        <ProjectCard project={project} onClick={onClick} />
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMobileMove(project);
+          }}
+          aria-label="更换状态"
+          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/95 border border-cream-300 shadow-sm flex items-center justify-center text-brown-500 active:bg-cream-100"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
 
-function KanbanColumn({ status, projects, onProjectClick }: { status: string; projects: ProjectItem[]; onProjectClick: (id: string) => void }) {
+function KanbanColumn({
+  status,
+  projects,
+  onProjectClick,
+  onMobileMove,
+}: {
+  status: string;
+  projects: ProjectItem[];
+  onProjectClick: (id: string) => void;
+  onMobileMove: (project: ProjectItem) => void;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const style = COLUMN_STYLES[status] || COLUMN_STYLES.quoted;
 
@@ -93,7 +132,12 @@ function KanbanColumn({ status, projects, onProjectClick }: { status: string; pr
       <SortableContext items={projects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-2.5 flex-1 min-h-[100px]">
           {projects.map((project) => (
-            <SortableProjectCard key={project.id} project={project} onClick={() => onProjectClick(project.id)} />
+            <SortableProjectCard
+              key={project.id}
+              project={project}
+              onClick={() => onProjectClick(project.id)}
+              onMobileMove={onMobileMove}
+            />
           ))}
           {projects.length === 0 && (
             <div className="flex flex-col items-center justify-center py-8 text-brown-300">
@@ -113,6 +157,7 @@ function KanbanColumn({ status, projects, onProjectClick }: { status: string; pr
 
 export default function KanbanBoard({ columns, onStatusChange, onProjectClick, completedTotal = 0, onShowCompleted }: KanbanBoardProps) {
   const [activeProject, setActiveProject] = useState<ProjectItem | null>(null);
+  const [movingProject, setMovingProject] = useState<ProjectItem | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -158,7 +203,13 @@ export default function KanbanBoard({ columns, onStatusChange, onProjectClick, c
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex flex-col md:flex-row gap-4 md:overflow-x-auto pb-4 md:min-h-[400px]">
         {KANBAN_STATUSES.map((status) => (
-          <KanbanColumn key={status} status={status} projects={columns[status] || []} onProjectClick={onProjectClick} />
+          <KanbanColumn
+            key={status}
+            status={status}
+            projects={columns[status] || []}
+            onProjectClick={onProjectClick}
+            onMobileMove={setMovingProject}
+          />
         ))}
 
         {/* 已完成列 — 固定入口卡片 */}
@@ -203,6 +254,44 @@ export default function KanbanBoard({ columns, onStatusChange, onProjectClick, c
           </div>
         ) : null}
       </DragOverlay>
+
+      {/* 移动端更换状态 */}
+      <Modal
+        isOpen={!!movingProject}
+        onClose={() => setMovingProject(null)}
+        title="更换项目状态"
+        size="sm"
+      >
+        {movingProject && (
+          <div className="space-y-2">
+            <p className="text-sm text-brown-500 mb-3">
+              <span className="font-semibold text-brown-800">{movingProject.name}</span>
+              <span className="text-brown-300 ml-2">当前：{STATUS_LABELS[movingProject.status] || movingProject.status}</span>
+            </p>
+            {(STATUS_TRANSITIONS[movingProject.status] || []).length === 0 ? (
+              <p className="text-sm text-brown-300 py-4 text-center">当前状态不可再变更</p>
+            ) : (
+              (STATUS_TRANSITIONS[movingProject.status] || []).map((next) => (
+                <button
+                  key={next}
+                  type="button"
+                  onClick={async () => {
+                    const target = movingProject;
+                    setMovingProject(null);
+                    await onStatusChange(target.id, next);
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-[12px] border border-cream-300 hover:border-caramel hover:bg-cream-50 active:bg-cream-100 transition-colors text-left"
+                >
+                  <span className="text-sm text-brown-800">{STATUS_LABELS[next] || next}</span>
+                  <svg className="w-4 h-4 text-brown-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </Modal>
     </DndContext>
   );
 }

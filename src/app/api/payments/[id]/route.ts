@@ -15,25 +15,17 @@ export async function PUT(
     if (!existing) return errorResponse('收款节点不存在', 404);
 
     const updateData: Record<string, unknown> = {};
+    let aggregateDiff = 0;
+
     if (body.name !== undefined) updateData.name = body.name;
     if (body.amount !== undefined) {
       const amount = parseFloat(body.amount);
       if (!Number.isFinite(amount) || amount <= 0) return errorResponse('金额无效', 400);
       updateData.amount = amount;
 
-      // 如果已收款节点修改金额，同步项目paidAmount和客户totalRevenue
+      // 已收款节点改金额：在事务内同步 project.paidAmount 和 client.totalRevenue
       if (existing.status === 'paid' && amount !== existing.paidAmount) {
-        const diff = amount - existing.paidAmount;
-        await prisma.project.update({
-          where: { id: existing.projectId },
-          data: { paidAmount: { increment: diff } },
-        });
-        if (existing.clientId) {
-          await prisma.client.update({
-            where: { id: existing.clientId },
-            data: { totalRevenue: { increment: diff } },
-          });
-        }
+        aggregateDiff = amount - existing.paidAmount;
         updateData.paidAmount = amount;
       }
     }
@@ -44,13 +36,30 @@ export async function PUT(
     }
     if (body.notes !== undefined) updateData.notes = body.notes;
 
-    const node = await prisma.paymentNode.update({
-      where: { id: params.id },
-      data: updateData,
-      include: {
-        project: { select: { id: true, name: true } },
-        client: { select: { id: true, name: true } },
-      },
+    const node = await prisma.$transaction(async (tx) => {
+      const updated = await tx.paymentNode.update({
+        where: { id: params.id },
+        data: updateData,
+        include: {
+          project: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true } },
+        },
+      });
+
+      if (aggregateDiff !== 0) {
+        await tx.project.update({
+          where: { id: existing.projectId },
+          data: { paidAmount: { increment: aggregateDiff } },
+        });
+        if (existing.clientId) {
+          await tx.client.update({
+            where: { id: existing.clientId },
+            data: { totalRevenue: { increment: aggregateDiff } },
+          });
+        }
+      }
+
+      return updated;
     });
 
     return successResponse(node);

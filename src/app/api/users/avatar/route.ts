@@ -1,8 +1,21 @@
 import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
+
+// 删除旧头像文件：仅限 /uploads/avatars/ 下文件，容错失败
+async function removeOldAvatar(avatarUrl: string | null | undefined) {
+  if (!avatarUrl) return;
+  if (!avatarUrl.startsWith('/uploads/avatars/')) return;
+  const filename = path.basename(avatarUrl);
+  const filepath = path.join(process.cwd(), 'public', 'uploads', 'avatars', filename);
+  try {
+    await unlink(filepath);
+  } catch {
+    // 文件不存在或已删除：忽略
+  }
+}
 
 const MAX_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -64,6 +77,9 @@ export async function POST(req: Request) {
     const filepath = path.join(uploadDir, filename);
     await writeFile(filepath, buffer);
 
+    // 读旧头像，写完新头像后再删除，避免数据库失败时孤立文件
+    const prev = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
+
     // 更新数据库
     const avatarUrl = `/uploads/avatars/${filename}`;
     const user = await prisma.user.update({
@@ -71,6 +87,8 @@ export async function POST(req: Request) {
       data: { avatarUrl },
       select: { id: true, avatarUrl: true },
     });
+
+    await removeOldAvatar(prev?.avatarUrl);
 
     return successResponse(user);
   } catch (e) {
@@ -87,11 +105,15 @@ export async function DELETE() {
   try {
     const userId = await requireUserId();
 
+    const prev = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
+
     const user = await prisma.user.update({
       where: { id: userId },
       data: { avatarUrl: '' },
       select: { id: true, avatarUrl: true },
     });
+
+    await removeOldAvatar(prev?.avatarUrl);
 
     return successResponse(user);
   } catch (e) {

@@ -83,6 +83,16 @@ export async function POST(req: Request) {
     if (!amount || amount <= 0) return errorResponse('请填写正确金额');
     if (!category) return errorResponse('请选择分类');
 
+    // 归属校验：projectId / clientId 必须属于当前用户
+    if (projectId) {
+      const project = await prisma.project.findFirst({ where: { id: projectId, userId }, select: { id: true } });
+      if (!project) return errorResponse('项目不存在', 400);
+    }
+    if (clientId) {
+      const client = await prisma.client.findFirst({ where: { id: clientId, userId }, select: { id: true } });
+      if (!client) return errorResponse('客户不存在', 400);
+    }
+
     const transaction = await prisma.transaction.create({
       data: {
         userId,

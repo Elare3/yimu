@@ -74,6 +74,15 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* 隐藏滚动条但保留滚动能力 */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* 安卓输入法弹出时防止布局跳动 */
 @supports (-webkit-touch-callout: none) or (pointer: coarse) {
   .fixed.bottom-0 {

@@ -101,15 +101,15 @@ export default function QuotesPage() {
   return (
     <div className="space-y-6">
       {/* 工具栏 */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         {/* 状态标签页 */}
-        <div className="flex gap-1 bg-cream-100 rounded-button p-1">
+        <div className="flex gap-1 bg-cream-100 rounded-button p-1 overflow-x-auto no-scrollbar -mx-1 px-1 sm:mx-0 sm:px-1">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.value}
               onClick={() => setStatusFilter(tab.value)}
               className={[
-                'px-4 py-1.5 rounded-[10px] text-sm font-medium transition-all duration-200',
+                'px-4 py-1.5 rounded-[10px] text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0',
                 statusFilter === tab.value
                   ? 'bg-white text-brown-800 shadow-sm'
                   : 'text-brown-300 hover:text-brown-500',
@@ -155,15 +155,15 @@ export default function QuotesPage() {
             {quotes.map((quote: QuoteItem) => (
               <div
                 key={quote.id}
-                className="bg-white rounded-card border-[1.5px] border-cream-300 p-5 hover:border-caramel/25 transition-all duration-200"
+                className="bg-white rounded-card border-[1.5px] border-cream-300 p-4 sm:p-5 hover:border-caramel/25 transition-all duration-200"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   {/* 左侧信息 — 可点击跳转详情 */}
                   <div
                     className="flex-1 min-w-0 cursor-pointer"
                     onClick={() => router.push(`/quotes/${quote.id}`)}
                   >
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center flex-wrap gap-2 mb-1">
                       <span className="text-brown-300 text-xs font-mono">{quote.quoteNumber}</span>
                       <StatusBadge status={quote.status} />
                       {quote.aiGenerated && (
@@ -171,16 +171,16 @@ export default function QuotesPage() {
                       )}
                     </div>
                     <h3 className="font-semibold text-brown-800 truncate">{quote.title}</h3>
-                    <div className="flex items-center gap-3 text-sm text-brown-300 mt-1">
+                    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-brown-300 mt-1">
                       {quote.client && <span>{quote.client.name}</span>}
-                      {quote.project && <span>· {quote.project.name}</span>}
+                      {quote.project && <span className="truncate max-w-[60%]">· {quote.project.name}</span>}
                       <span>· {formatDate(quote.createdAt)}</span>
                     </div>
                   </div>
 
                   {/* 右侧金额 + 操作按钮 */}
-                  <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                    <div className="text-right">
+                  <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 sm:ml-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-cream-200">
+                    <div className="text-left sm:text-right">
                       <p className="font-serif text-xl font-bold text-brown-800">
                         {formatAmount(quote.total)}
                       </p>
@@ -200,7 +200,7 @@ export default function QuotesPage() {
                           setLinkingQuote(quote);
                           setSelectedProjectId(quote.project?.id || '');
                         }}
-                        className="p-2 rounded-lg hover:bg-cream-100 text-brown-300 hover:text-caramel transition-colors"
+                        className="p-2 rounded-lg hover:bg-cream-100 active:bg-cream-100 text-brown-300 hover:text-caramel transition-colors"
                         title={quote.project ? '更换关联项目' : '关联到项目'}
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -214,7 +214,7 @@ export default function QuotesPage() {
                           e.stopPropagation();
                           setDeletingQuote(quote);
                         }}
-                        className="p-2 rounded-lg hover:bg-danger-light text-brown-300 hover:text-danger transition-colors"
+                        className="p-2 rounded-lg hover:bg-danger-light active:bg-danger-light text-brown-300 hover:text-danger transition-colors"
                         title="删除报价单"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>

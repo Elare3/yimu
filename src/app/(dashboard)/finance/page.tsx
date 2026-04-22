@@ -118,13 +118,13 @@ export default function FinancePage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3 flex-wrap">
           {/* 视图切换 */}
-          <div className="flex gap-1 bg-cream-100 rounded-button p-1">
+          <div className="flex gap-1 bg-cream-100 rounded-button p-1 overflow-x-auto no-scrollbar">
             {VIEW_TABS.map((tab) => (
               <button
                 key={tab.value}
                 onClick={() => setViewMode(tab.value as 'list' | 'project' | 'week')}
                 className={[
-                  'px-3 py-1.5 rounded-[10px] text-sm font-medium transition-all duration-200',
+                  'px-3 py-1.5 rounded-[10px] text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0',
                   viewMode === tab.value
                     ? 'bg-white text-brown-800 shadow-sm'
                     : 'text-brown-300 hover:text-brown-500',
@@ -136,13 +136,13 @@ export default function FinancePage() {
           </div>
           {/* 类型标签（仅明细视图） */}
           {viewMode === 'list' && (
-            <div className="flex gap-1 bg-cream-100 rounded-button p-1">
+            <div className="flex gap-1 bg-cream-100 rounded-button p-1 overflow-x-auto no-scrollbar">
               {TYPE_TABS.map((tab) => (
                 <button
                   key={tab.value}
                   onClick={() => setTypeFilter(tab.value)}
                   className={[
-                    'px-4 py-1.5 rounded-[10px] text-sm font-medium transition-all duration-200',
+                    'px-4 py-1.5 rounded-[10px] text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0',
                     typeFilter === tab.value
                       ? 'bg-white text-brown-800 shadow-sm'
                       : 'text-brown-300 hover:text-brown-500',

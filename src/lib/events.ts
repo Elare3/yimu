@@ -67,7 +67,7 @@ on('quote.accepted', async ({ quoteId, userId }) => {
   // 如果已经关联项目，推进状态并创建收款节点
   if (quote.projectId) {
     const existingProject = await prisma.project.findUnique({ where: { id: quote.projectId } });
-    if (existingProject && ['draft', 'quoted'].includes(existingProject.status)) {
+    if (existingProject && existingProject.status === 'quoted') {
       await prisma.project.update({
         where: { id: quote.projectId },
         data: { status: 'in_progress', totalAmount: quote.total, startDate: existingProject.startDate || new Date() },
@@ -174,9 +174,9 @@ on('project.status_changed', async ({ projectId, userId, from, to }) => {
         }
 
         case 'cancelPendingPayments': {
-          await prisma.paymentNode.updateMany({
-            where: { projectId, status: { in: ['pending', 'reminded'] } },
-            data: { status: 'cancelled' },
+          // PaymentNode.status 没有 'cancelled' 值，项目取消时直接删除未支付节点
+          await prisma.paymentNode.deleteMany({
+            where: { projectId, status: { in: ['pending', 'reminded', 'overdue'] } },
           });
           break;
         }
@@ -278,7 +278,7 @@ on('daily.check', async ({ userId }) => {
   const today = new Date();
 
   const overdueNodes = await prisma.paymentNode.findMany({
-    where: { userId, status: 'pending', dueDate: { lt: today } },
+    where: { userId, status: { in: ['pending', 'reminded'] }, dueDate: { lt: today } },
   });
 
   for (const node of overdueNodes) {

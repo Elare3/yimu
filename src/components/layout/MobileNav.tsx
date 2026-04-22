@@ -25,19 +25,13 @@ const TABS = [
     ),
   },
   {
-    label: '',
-    href: '/projects/new',
-    icon: () => (
-      <div
-        className="w-12 h-12 -mt-4 rounded-full flex items-center justify-center text-white shadow-lg"
-        style={{ background: 'linear-gradient(135deg, #C47D3F, #D4956A)', boxShadow: '0 4px 16px rgba(196,125,63,0.4)' }}
-      >
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-        </svg>
-      </div>
+    label: '报价',
+    href: '/quotes',
+    icon: (active: boolean) => (
+      <svg className="w-5 h-5" fill={active ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 0 : 1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+      </svg>
     ),
-    isCenter: true,
   },
   {
     label: '记账',
@@ -81,7 +75,6 @@ function MobileNavInner() {
       <div className="flex items-center justify-around px-2 py-2">
         {TABS.map((tab) => {
           const isActive = pathname === tab.href || pathname?.startsWith(tab.href + '/');
-          const isCenter = 'isCenter' in tab && tab.isCenter;
 
           return (
             <Link
@@ -97,15 +90,13 @@ function MobileNavInner() {
                 }
               }}
               className={`flex flex-col items-center gap-0.5 min-w-[48px] transition-colors ${
-                isCenter ? '' : isActive ? 'text-caramel' : 'text-brown-300'
+                isActive ? 'text-caramel' : 'text-brown-300'
               }`}
             >
               {tab.icon(isActive)}
-              {tab.label && (
-                <span className={`text-[10px] ${isActive ? 'font-semibold' : ''}`}>
-                  {tab.label}
-                </span>
-              )}
+              <span className={`text-[10px] ${isActive ? 'font-semibold' : ''}`}>
+                {tab.label}
+              </span>
             </Link>
           );
         })}

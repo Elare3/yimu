@@ -11,6 +11,14 @@ export async function POST(
   try {
     const userId = await requireUserId();
 
+    // 归属校验 + 状态校验（避免给他人节点催款 / 把已付节点打回 reminded）
+    const existing = await prisma.paymentNode.findFirst({
+      where: { id: params.id, userId },
+      select: { status: true },
+    });
+    if (!existing) return errorResponse('收款节点不存在', 404);
+    if (existing.status === 'paid') return errorResponse('该节点已收款，无需催款', 400);
+
     // 从请求中获取可选的附加信息
     let channelHint: 'wechat' | 'email' | undefined;
     try {

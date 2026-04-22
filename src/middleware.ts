@@ -159,6 +159,8 @@ export const config = {
     '/api/dashboard/:path*',
     '/api/notifications/:path*',
     '/api/users/:path*',
+    '/api/export',
+    '/api/export/:path*',
     '/api/auth/callback/:path*',
   ],
 };
