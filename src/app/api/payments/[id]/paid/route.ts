@@ -80,7 +80,10 @@ export async function PUT(
       if (remainingPayments === 0) {
         const project = await tx.project.findUnique({
           where: { id: existing.projectId },
-          select: { status: true, deliverables: true },
+          select: {
+            status: true,
+            deliverables: { select: { status: true } },
+          },
         });
 
         if (project && ['in_progress', 'review'].includes(project.status)) {

@@ -113,11 +113,13 @@ export async function POST(req: Request) {
             paidAmount: 7500,
             startDate: new Date(now.getTime() - 7 * 86400000),
             deadline: twoWeeksLater,
-            deliverables: [
-              { name: 'LOGO优化方案', status: 'completed', completedAt: new Date(now.getTime() - 3 * 86400000) },
-              { name: 'VI标准手册', status: 'in_progress', completedAt: null },
-              { name: '物料设计(名片/信封/工牌)', status: 'pending', completedAt: null },
-            ],
+            deliverables: {
+              create: [
+                { name: 'LOGO优化方案', status: 'done', completedAt: new Date(now.getTime() - 3 * 86400000), order: 0 },
+                { name: 'VI标准手册', status: 'pending', completedAt: null, order: 1 },
+                { name: '物料设计(名片/信封/工牌)', status: 'pending', completedAt: null, order: 2 },
+              ],
+            },
             tags: ['品牌设计', 'VI'],
             notes: '演示数据',
           },
@@ -134,12 +136,14 @@ export async function POST(req: Request) {
             totalAmount: 35000,
             paidAmount: 0,
             deadline: oneMonthLater,
-            deliverables: [
-              { name: '需求文档', status: 'completed', completedAt: new Date(now.getTime() - 1 * 86400000) },
-              { name: 'UI设计稿', status: 'pending', completedAt: null },
-              { name: '前端开发', status: 'pending', completedAt: null },
-              { name: '后端+接口', status: 'pending', completedAt: null },
-            ],
+            deliverables: {
+              create: [
+                { name: '需求文档', status: 'done', completedAt: new Date(now.getTime() - 1 * 86400000), order: 0 },
+                { name: 'UI设计稿', status: 'pending', completedAt: null, order: 1 },
+                { name: '前端开发', status: 'pending', completedAt: null, order: 2 },
+                { name: '后端+接口', status: 'pending', completedAt: null, order: 3 },
+              ],
+            },
             tags: ['小程序', '教育'],
             notes: '演示数据',
           },

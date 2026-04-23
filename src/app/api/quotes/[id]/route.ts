@@ -16,6 +16,7 @@ export async function GET(
       include: {
         client: { select: { id: true, name: true, contactPerson: true, phone: true, email: true, address: true } },
         project: { select: { id: true, name: true } },
+        items: { orderBy: { order: 'asc' } },
       },
     });
 
@@ -54,13 +55,14 @@ export async function PUT(
 
     // 如果更新了报价项，重新计算金额
     if (items) {
-      const processedItems = items.map((item: { quantity: number; unitPrice: number; name: string; description?: string; unit?: string }) => ({
+      const processedItems = items.map((item: { quantity: number; unitPrice: number; name: string; description?: string; unit?: string }, i: number) => ({
         name: item.name,
         description: item.description || '',
         quantity: item.quantity || 1,
         unit: item.unit || '项',
         unitPrice: item.unitPrice,
         amount: (item.quantity || 1) * item.unitPrice,
+        order: i,
       }));
 
       const subtotal = processedItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
@@ -69,7 +71,11 @@ export async function PUT(
       const discountAmount = discount ?? existing.discount;
       const total = subtotal + taxAmount - discountAmount;
 
-      updateData.items = processedItems;
+      // 关联表：全量替换
+      updateData.items = {
+        deleteMany: {},
+        create: processedItems,
+      };
       updateData.subtotal = subtotal;
       updateData.taxRate = rate;
       updateData.taxAmount = taxAmount;
@@ -83,6 +89,7 @@ export async function PUT(
       include: {
         client: { select: { id: true, name: true } },
         project: { select: { id: true, name: true } },
+        items: { orderBy: { order: 'asc' } },
       },
     });
 

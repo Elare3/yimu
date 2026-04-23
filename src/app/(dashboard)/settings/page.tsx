@@ -6,7 +6,9 @@ import useSWR from 'swr';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/stores/toastStore';
+import { preHashPassword } from '@/lib/client-password';
 
 // ── 常量 ──
 
@@ -130,6 +132,14 @@ export default function SettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // 退出登录确认
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [signOutLoading, setSignOutLoading] = useState(false);
+  const confirmSignOut = async () => {
+    setSignOutLoading(true);
+    await signOut({ callbackUrl: '/login' });
+  };
+
   // 密码设置
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPwd, setCurrentPwd] = useState('');
@@ -243,12 +253,17 @@ export default function SettingsPage() {
     if (!newPwd || newPwd.length < 6) { toast.error('新密码至少 6 位'); return; }
     if (newPwd !== confirmPwd) { toast.error('两次输入的密码不一致'); return; }
     if (hasPassword && !currentPwd) { toast.error('请输入当前密码'); return; }
+    const phoneForHash = profile?.phone;
+    if (!phoneForHash) { toast.error('用户信息缺失，请刷新页面后重试'); return; }
     setPwdLoading(true);
     try {
+      // 客户端先做 SHA-256 预哈希（绑定手机号），服务器只收到 64 位 hex，不见明文
+      const hashedCurrent = currentPwd ? await preHashPassword(phoneForHash, currentPwd) : '';
+      const hashedNew = await preHashPassword(phoneForHash, newPwd);
       const res = await fetch('/api/users/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
+        body: JSON.stringify({ currentPassword: hashedCurrent, newPassword: hashedNew }),
       });
       const r = await res.json();
       if (r.success) {
@@ -399,7 +414,7 @@ export default function SettingsPage() {
           {/* 右侧状态 */}
           <div className="flex flex-col items-end gap-1.5 sm:gap-2 shrink-0 pb-0.5">
             <button
-              onClick={() => signOut({ callbackUrl: '/login' })}
+              onClick={() => setShowSignOutConfirm(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 sm:py-1 rounded-full text-xs text-brown-300 hover:text-red-500 hover:bg-red-50 border border-cream-300 hover:border-red-200 transition-all"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -788,7 +803,7 @@ export default function SettingsPage() {
               </Section>
 
               <Section title="退出登录">
-                <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: '/login' })}>退出当前账号</Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowSignOutConfirm(true)}>退出当前账号</Button>
               </Section>
 
               {/* 危险区域 */}
@@ -822,6 +837,28 @@ export default function SettingsPage() {
 
         </div>
       </div>
+
+      {/* 退出登录确认 */}
+      <Modal
+        isOpen={showSignOutConfirm}
+        onClose={() => !signOutLoading && setShowSignOutConfirm(false)}
+        title="退出登录"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-brown-500">
+            确认退出当前账号？退出后需要重新登录才能继续使用。
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setShowSignOutConfirm(false)} disabled={signOutLoading}>
+              取消
+            </Button>
+            <Button variant="danger" onClick={confirmSignOut} loading={signOutLoading}>
+              确认退出
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

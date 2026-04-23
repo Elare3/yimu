@@ -42,7 +42,20 @@
       "Bash(wait)",
       "Bash(kill -0 1031)",
       "Bash(npm run *)",
-      "Bash(grep -rn \"max-w\\\\|w-\\\\[.*px\\\\]\\\\|fixed.*width\\\\|w-full\" /d/yimu/src/app -type f --include=\"*.tsx\")"
+      "Bash(grep -rn \"max-w\\\\|w-\\\\[.*px\\\\]\\\\|fixed.*width\\\\|w-full\" /d/yimu/src/app -type f --include=\"*.tsx\")",
+      "Bash(where psql *)",
+      "Bash(where pg_ctl)",
+      "Bash(sc query *)",
+      "PowerShell(npx prisma generate)",
+      "PowerShell(npx prisma migrate dev --name init)",
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(if \\($?\\) { \"TS CHECK PASSED\" } else { \"TS CHECK FAILED\" })",
+      "PowerShell(npm run dev)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/login\" -UseBasicParsing -TimeoutSec 30; \"HTTP $\\($r.StatusCode\\) - $\\($r.Content.Length\\) bytes\" } catch { \"ERROR: $_\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/api/onboarding\" -UseBasicParsing -TimeoutSec 30; \"HTTP $\\($r.StatusCode\\) - $\\($r.Content\\)\" } catch { $sc = $_.Exception.Response.StatusCode.value__; \"HTTP $sc - $_\" })",
+      "Bash(bash -n D:/yimu/scripts/deploy.sh)",
+      "Bash(bash -n D:/yimu/scripts/pg-bootstrap.sh)"
     ]
   }
 }

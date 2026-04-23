@@ -2,6 +2,9 @@ import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
 
+// 需要读取会话 cookie，无法静态渲染
+export const dynamic = 'force-dynamic';
+
 // GET /api/notifications — 获取用户通知列表
 // 通知来源：逾期收款、即将到期收款、报价即将过期、项目截止日临近、待验收项目、最近完成
 export async function GET() {

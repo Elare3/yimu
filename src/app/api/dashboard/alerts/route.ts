@@ -3,6 +3,9 @@ import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
 import { TAX_RULES_2026 } from '@/lib/rules';
 
+// 需要读取会话 cookie，无法静态渲染
+export const dynamic = 'force-dynamic';
+
 // GET /api/dashboard/alerts — 主动提醒（逾期/到期/税务/截止日）
 export async function GET() {
   try {

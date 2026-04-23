@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
-import { hmacPhone } from '@/lib/encryption';
+import { encrypt, hmacPhone } from '@/lib/encryption';
 
 // POST /api/users/bindphone - 绑定手机号
 export async function POST(req: Request) {
@@ -37,12 +37,19 @@ export async function POST(req: Request) {
       return errorResponse('该手机号已绑定其他账户');
     }
 
+    // 1) phone 存密文（AES-GCM，随机 IV）；phoneHash 是登录/唯一性用的 HMAC 索引，必须同步更新
+    // 2) 客户端密码预哈希绑定了手机号，换完手机后老 passwordHash 验不过，统一清空：
+    //    用户用新手机号走验证码登录，再去设置页重设密码
     await prisma.user.update({
       where: { id: userId },
-      data: { phone },
+      data: {
+        phone: encrypt(phone),
+        phoneHash: hmacPhone(phone),
+        passwordHash: null,
+      },
     });
 
-    return successResponse({ phone });
+    return successResponse({ phone, passwordReset: true });
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') {
       return errorResponse('请先登录', 401);

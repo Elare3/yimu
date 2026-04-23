@@ -48,15 +48,18 @@ export async function POST(req: Request) {
         projectId: projectId || null,
         quoteNumber,
         title: data.title,
-        items: data.items.map((i: { _warning?: string; _valid?: boolean; name: string; description: string; quantity: number; unit: string; unitPrice: number; amount: number; priceReference: string }) => ({
-          name: i.name,
-          description: i.description,
-          quantity: i.quantity,
-          unit: i.unit,
-          unitPrice: i.unitPrice,
-          amount: i.amount,
-          priceReference: i.priceReference,
-        })),
+        items: {
+          create: data.items.map((i: { _warning?: string; _valid?: boolean; name: string; description: string; quantity: number; unit: string; unitPrice: number; amount: number; priceReference: string }, idx: number) => ({
+            name: i.name,
+            description: i.description,
+            quantity: i.quantity,
+            unit: i.unit,
+            unitPrice: i.unitPrice,
+            amount: i.amount,
+            priceReference: i.priceReference,
+            order: idx,
+          })),
+        },
         subtotal: data.subtotal,
         taxRate: 0,
         taxAmount: 0,
@@ -72,6 +75,7 @@ export async function POST(req: Request) {
       include: {
         client: { select: { id: true, name: true } },
         project: { select: { id: true, name: true } },
+        items: { orderBy: { order: 'asc' } },
       },
     });
 

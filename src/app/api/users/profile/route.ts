@@ -22,7 +22,7 @@ export async function GET() {
         planExpiresAt: true,
         privacyMode: true,
         passwordHash: true,
-        settings: true,
+        settings: true, // UserSettings 1:1 relation
         createdAt: true,
       },
     });

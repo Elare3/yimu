@@ -127,6 +127,16 @@ export async function POST(req: Request) {
       return errorResponse('客户不存在');
     }
 
+    // 将外部传入的 deliverables 数组转为关联表 nested create
+    const deliverableCreate = Array.isArray(deliverables)
+      ? deliverables.map((d: { name: string; status?: string; completedAt?: string | Date | null }, i: number) => ({
+          name: d.name,
+          status: d.status || 'pending',
+          completedAt: d.completedAt ? new Date(d.completedAt) : null,
+          order: i,
+        }))
+      : [];
+
     const project = await prisma.project.create({
       data: {
         userId,
@@ -140,13 +150,14 @@ export async function POST(req: Request) {
         totalAmount: safeParseFloat(totalAmount) ?? 0,
         startDate: startDate ? new Date(startDate) : null,
         deadline: deadline ? new Date(deadline) : null,
-        deliverables: deliverables || [],
+        deliverables: { create: deliverableCreate },
         revisionLimit: revisionLimit ? parseInt(revisionLimit) : null,
         tags: tags || [],
         notes: notes || '',
       },
       include: {
         client: { select: { id: true, name: true } },
+        deliverables: { orderBy: { order: 'asc' } },
       },
     });
 

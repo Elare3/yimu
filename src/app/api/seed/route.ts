@@ -173,6 +173,7 @@ export async function POST(req: Request) {
             name: d,
             status: dStatus,
             completedAt: dStatus === 'done' ? randomPastDate(30) : null,
+            order: i,
           };
         });
 
@@ -190,7 +191,7 @@ export async function POST(req: Request) {
             startDate,
             deadline,
             completedAt: isCompleted ? randomPastDate(10) : undefined,
-            deliverables,
+            deliverables: { create: deliverables },
             revisionCount: isCompleted || status === 'review' ? randInt(1, 4) : 0,
             tags: pickN(['品牌', '设计', '开发', '运营', '咨询', '小程序', '视觉'], 2),
             notes: 'seed-data',
@@ -225,6 +226,7 @@ export async function POST(req: Request) {
             unitPrice,
             amount,
             priceReference: '',
+            order: i,
           });
         }
         const taxRate = pick([0, 0, 0, 0.01, 0.03]);
@@ -239,7 +241,7 @@ export async function POST(req: Request) {
             clientId: proj.client.id,
             quoteNumber: quoteNumber(quoteIdx++),
             title: proj.name,
-            items,
+            items: { create: items },
             subtotal,
             taxRate,
             taxAmount,
@@ -313,7 +315,7 @@ export async function POST(req: Request) {
             paidAmount,
             reminderCount: reminderMessages.length,
             lastReminderAt: reminderMessages.length > 0 ? reminderMessages[reminderMessages.length - 1].sentAt : undefined,
-            reminderMessages,
+            reminderMessages: reminderMessages.length > 0 ? { create: reminderMessages } : undefined,
             notes: 'seed-data',
           },
         });

@@ -2,6 +2,7 @@ import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword, hashPassword } from '@/lib/password';
+import { isPreHashed } from '@/lib/client-password';
 import { encrypt, hmacPhone } from '@/lib/encryption';
 
 export const authOptions: NextAuthOptions = {
@@ -81,8 +82,10 @@ export const authOptions: NextAuthOptions = {
         if (!/^1[3-9]\d{9}$/.test(phone)) {
           throw new Error('手机号格式不正确');
         }
-        if (password.length < 6 || password.length > 64) {
-          throw new Error('密码长度需在 6-64 位之间');
+        // 客户端必须先做 SHA-256 预哈希（见 src/lib/client-password.ts），服务器只接受 64 位小写 hex。
+        // 这样可以保证 DevTools / 代理日志 / 服务器日志都看不到明文密码。
+        if (!isPreHashed(password)) {
+          throw new Error('密码格式不正确，请刷新页面后重试');
         }
 
         let user = await prisma.user.findUnique({ where: { phoneHash: hmacPhone(phone) } });
@@ -126,8 +129,14 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   session: {
+    // JWT 有效期固定 30 天；实际「会话长度」由 cookie 的 Max-Age 控制，
+    // 登录成功后通过 /api/auth/persist-session 根据「记住我」改写 cookie：
+    //   - 不记住：cookie 为 session-only（关闭浏览器即登出）
+    //   - 记住：cookie Max-Age = 30 天
     strategy: 'jwt',
-    maxAge: 7 * 24 * 60 * 60, // 7 days
+    maxAge: 30 * 24 * 60 * 60,
+    // 不自动刷新 cookie，防止 NextAuth 用默认 maxAge 覆盖掉我们改写后的 session-only cookie
+    updateAge: 30 * 24 * 60 * 60,
   },
   cookies: {
     sessionToken: {

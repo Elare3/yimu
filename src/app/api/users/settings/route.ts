@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
 
-// PUT /api/users/settings - 更新用户经营设置
+// PUT /api/users/settings - 更新用户经营设置（1:1 关联表，自动 upsert）
 export async function PUT(req: Request) {
   try {
     const userId = await requireUserId();
@@ -10,55 +10,44 @@ export async function PUT(req: Request) {
 
     const { currency, taxRate, paymentReminderDays, defaultPaymentTerms } = body;
 
-    const settings: Record<string, unknown> = {};
+    const patch: Record<string, unknown> = {};
 
     if (currency !== undefined) {
       const validCurrencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY'];
       if (!validCurrencies.includes(currency)) return errorResponse('无效的货币类型');
-      settings.currency = currency;
+      patch.currency = currency;
     }
     if (taxRate !== undefined) {
       const rate = parseFloat(taxRate);
       if (isNaN(rate) || rate < 0 || rate > 100) return errorResponse('税率应在 0-100 之间');
-      settings.taxRate = rate;
+      patch.taxRate = rate;
     }
     if (paymentReminderDays !== undefined) {
       if (!Array.isArray(paymentReminderDays)) return errorResponse('催款提醒天数格式无效');
-      settings.paymentReminderDays = paymentReminderDays.map(Number).filter(n => !isNaN(n) && n >= 0);
+      patch.paymentReminderDays = paymentReminderDays.map(Number).filter(n => !isNaN(n) && n >= 0);
     }
     if (defaultPaymentTerms !== undefined) {
-      settings.defaultPaymentTerms = String(defaultPaymentTerms).trim();
+      patch.defaultPaymentTerms = String(defaultPaymentTerms).trim();
     }
 
-    if (Object.keys(settings).length === 0) {
+    if (Object.keys(patch).length === 0) {
       return errorResponse('没有需要更新的设置');
     }
 
-    // 先获取现有设置再合并
-    const existing = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { settings: true },
-    });
-
-    const mergedSettings = {
-      currency: 'CNY',
-      taxRate: 0,
-      paymentReminderDays: [3, 1, 0],
-      defaultPaymentTerms: '',
-      ...(existing?.settings || {}),
-      ...settings,
-    };
-
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: { settings: mergedSettings },
-      select: {
-        id: true,
-        settings: true,
+    // UserSettings 1:1：不存在则创建，存在则合并 patch
+    const settings = await prisma.userSettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        currency: (patch.currency as string) ?? 'CNY',
+        taxRate: (patch.taxRate as number) ?? 0,
+        paymentReminderDays: (patch.paymentReminderDays as number[]) ?? [3, 1, 0],
+        defaultPaymentTerms: (patch.defaultPaymentTerms as string) ?? '',
       },
+      update: patch,
     });
 
-    return successResponse(user);
+    return successResponse({ id: userId, settings });
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') {
       return errorResponse('请先登录', 401);

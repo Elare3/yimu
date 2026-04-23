@@ -16,6 +16,7 @@ export async function GET(
         quotes: { orderBy: { createdAt: 'desc' }, take: 5 },
         transactions: { orderBy: { date: 'desc' }, take: 10 },
         paymentNodes: { orderBy: { dueDate: 'asc' } },
+        deliverables: { orderBy: { order: 'asc' } },
       },
     });
 
@@ -75,7 +76,20 @@ export async function PUT(
     if (totalAmount !== undefined) updateData.totalAmount = parseFloat(totalAmount);
     if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
     if (deadline !== undefined) updateData.deadline = deadline ? new Date(deadline) : null;
-    if (deliverables !== undefined) updateData.deliverables = deliverables;
+    // deliverables 是关联表：全量替换（删掉旧的，插入新的）
+    if (deliverables !== undefined) {
+      updateData.deliverables = {
+        deleteMany: {},
+        create: Array.isArray(deliverables)
+          ? deliverables.map((d: { name: string; status?: string; completedAt?: string | Date | null }, i: number) => ({
+              name: d.name,
+              status: d.status || 'pending',
+              completedAt: d.completedAt ? new Date(d.completedAt) : null,
+              order: i,
+            }))
+          : [],
+      };
+    }
     if (revisionLimit !== undefined) updateData.revisionLimit = revisionLimit ? parseInt(revisionLimit) : null;
     if (revisionCount !== undefined) updateData.revisionCount = parseInt(revisionCount);
     if (tags !== undefined) updateData.tags = tags;
@@ -86,6 +100,7 @@ export async function PUT(
       data: updateData,
       include: {
         client: { select: { id: true, name: true } },
+        deliverables: { orderBy: { order: 'asc' } },
       },
     });
 

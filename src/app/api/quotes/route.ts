@@ -64,14 +64,15 @@ export async function POST(req: Request) {
     const client = await prisma.client.findFirst({ where: { id: clientId, userId } });
     if (!client) return errorResponse('客户不存在');
 
-    // 计算金额
-    const processedItems = items.map((item: { quantity: number; unitPrice: number; name: string; description?: string; unit?: string }) => ({
+    // 计算金额（附带显示顺序）
+    const processedItems = items.map((item: { quantity: number; unitPrice: number; name: string; description?: string; unit?: string }, i: number) => ({
       name: item.name,
       description: item.description || '',
       quantity: item.quantity || 1,
       unit: item.unit || '项',
       unitPrice: item.unitPrice,
       amount: (item.quantity || 1) * item.unitPrice,
+      order: i,
     }));
 
     const subtotal = processedItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
             projectId: projectId || null,
             quoteNumber,
             title,
-            items: processedItems,
+            items: { create: processedItems },
             subtotal,
             taxRate: rate,
             taxAmount,
@@ -108,6 +109,7 @@ export async function POST(req: Request) {
           include: {
             client: { select: { id: true, name: true } },
             project: { select: { id: true, name: true } },
+            items: { orderBy: { order: 'asc' } },
           },
         });
         break;

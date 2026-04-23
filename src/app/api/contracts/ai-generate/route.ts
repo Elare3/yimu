@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       include: {
         client: true,
         project: true,
+        items: { orderBy: { order: 'asc' } },
       },
     });
     if (!quote) return errorResponse('报价单不存在');
@@ -37,13 +38,13 @@ export async function POST(req: Request) {
     if (!user) return errorResponse('用户不存在');
 
     // 构建报价概要
-    const itemsSummary = (quote.items as { name: string; amount: number }[])
+    const itemsSummary = quote.items
       .map(i => `${i.name}（¥${i.amount}）`)
       .join('、');
     const quoteSummary = `报价单${quote.quoteNumber}：${quote.title}，包含 ${itemsSummary}，合计 ¥${quote.total}`;
 
     // 提取交付物列表
-    const deliverables = (quote.items as { name: string }[]).map(i => i.name);
+    const deliverables = quote.items.map(i => i.name);
 
     // 修改轮数默认值（按服务类型）
     const defaultRevisionMap: Record<string, number> = {

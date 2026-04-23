@@ -35,14 +35,7 @@ export async function POST(
       channelHint,
     });
 
-    // 记录催款
-    const reminderMessage = {
-      sentAt: new Date(),
-      channel: result.channel,
-      content: result.content,
-      aiGenerated: true,
-    };
-
+    // 记录催款（写入关联表）
     await prisma.paymentNode.update({
       where: { id: params.id },
       data: {
@@ -50,7 +43,12 @@ export async function POST(
         reminderCount: { increment: 1 },
         lastReminderAt: new Date(),
         reminderMessages: {
-          push: reminderMessage,
+          create: {
+            sentAt: new Date(),
+            channel: result.channel,
+            content: result.content,
+            aiGenerated: true,
+          },
         },
       },
     });

@@ -2,6 +2,9 @@ import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { errorResponse } from '@/lib/utils';
 
+// 需要读取会话 cookie，无法静态渲染
+export const dynamic = 'force-dynamic';
+
 // GET /api/users/export — 导出当前用户的全部数据
 export async function GET() {
   try {

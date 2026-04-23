@@ -5,8 +5,11 @@
 #   cd /var/www/yimu && bash scripts/deploy.sh
 # 可选环境变量：
 #   PM2_APP        PM2 应用名（默认 yimu）
-#   SKIP_BACKFILL  设为 1 可跳过 phoneHash 回填
+#   SKIP_MIGRATE   设为 1 可跳过 prisma migrate deploy
 #   SKIP_PULL      设为 1 可跳过 git pull（已手动拉取时）
+#
+# 首次切换到 PostgreSQL：先跑 scripts/pg-bootstrap.sh 安装 PG17 + 建库，
+# 再改 .env 的 DATABASE_URL，然后才跑本脚本。
 # ============================================================
 
 set -Eeuo pipefail
@@ -162,17 +165,14 @@ step "5. prisma generate"
 ./node_modules/.bin/prisma generate
 ok "Prisma Client 已生成"
 
-# ── 6. phoneHash 回填（幂等） ──
-step "6. 回填 phoneHash（幂等，已有用户会跳过）"
-if [ "${SKIP_BACKFILL:-0}" = "1" ]; then
-  warn "SKIP_BACKFILL=1，跳过回填"
+# ── 6. 应用数据库迁移（幂等） ──
+# 首次部署会建全部表；后续只会补上新迁移。无新迁移时秒回。
+step "6. prisma migrate deploy（应用数据库迁移）"
+if [ "${SKIP_MIGRATE:-0}" = "1" ]; then
+  warn "SKIP_MIGRATE=1，跳过迁移"
 else
-  if [ -f scripts/backfill-phone-hash.mjs ]; then
-    node scripts/backfill-phone-hash.mjs
-    ok "phoneHash 回填完成"
-  else
-    warn "未找到 scripts/backfill-phone-hash.mjs，跳过"
-  fi
+  ./node_modules/.bin/prisma migrate deploy
+  ok "迁移已应用"
 fi
 
 # ── 7. 确保上传目录存在 ──

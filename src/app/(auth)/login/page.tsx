@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import { preHashPassword } from '@/lib/client-password';
 
 type Mode = 'password' | 'code';
 type Stage = 'input' | 'code' | 'success';
@@ -19,8 +20,25 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [remember, setRemember] = useState(false);
   const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
   const passwordRef = useRef<HTMLInputElement>(null);
+
+  // 登录成功后根据「记住我」重写 cookie：
+  //  - false（默认）：session-only cookie，关闭浏览器即登出（共用电脑安全）
+  //  - true：持久 30 天
+  const persistSession = useCallback(async (shouldRemember: boolean) => {
+    try {
+      await fetch('/api/auth/persist-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remember: shouldRemember }),
+        credentials: 'same-origin',
+      });
+    } catch {
+      // 写 cookie 失败不影响登录；退路是 NextAuth 默认的 30 天持久 cookie
+    }
+  }, []);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -79,10 +97,11 @@ export default function LoginPage() {
       codeRefs.current[0]?.focus();
       setLoading(false);
     } else {
+      await persistSession(remember);
       setStage('success');
       setTimeout(() => router.push('/dashboard'), 1500);
     }
-  }, [phone, router]);
+  }, [phone, router, persistSession, remember]);
 
   const handlePasswordSubmit = useCallback(async () => {
     if (isRegister && password !== confirmPassword) {
@@ -93,9 +112,12 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
+    // 客户端先做一次 SHA-256 预哈希（绑定手机号），避免 DevTools / 代理日志看到明文密码
+    const hashedPassword = await preHashPassword(phone, password);
+
     const res = await signIn('password', {
       phone,
-      password,
+      password: hashedPassword,
       redirect: false,
     });
 
@@ -109,10 +131,11 @@ export default function LoginPage() {
       }
       setLoading(false);
     } else {
+      await persistSession(remember);
       setStage('success');
       setTimeout(() => router.push('/dashboard'), 1500);
     }
-  }, [phone, password, confirmPassword, isRegister, router]);
+  }, [phone, password, confirmPassword, isRegister, router, persistSession, remember]);
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -318,6 +341,35 @@ export default function LoginPage() {
               {error && (
                 <p className="text-danger text-sm mb-4">{error}</p>
               )}
+
+              {/* 记住我 — 默认关闭，共用电脑保护 */}
+              <label className="flex items-center gap-2 mb-4 cursor-pointer select-none group">
+                <span
+                  className="relative w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-all duration-150"
+                  style={{
+                    borderColor: remember ? '#C47D3F' : '#D8CFC2',
+                    backgroundColor: remember ? '#C47D3F' : '#fff',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  {remember && (
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </span>
+                <span className="text-sm text-brown-500 group-hover:text-brown-800 transition-colors">
+                  30 天内免登录
+                </span>
+                <span className="text-xs text-brown-300 ml-1">
+                  （公用电脑建议不勾选）
+                </span>
+              </label>
 
               {/* 提交按钮 */}
               <button

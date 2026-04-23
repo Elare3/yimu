@@ -5,13 +5,13 @@ generator client {
 }
 
 datasource db {
-  provider = "mongodb"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 // ── 用户 ──
 model User {
-  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  id            String        @id @default(cuid())
   phone         String        // 存储密文（AES-GCM，随机 IV），不建索引
   phoneHash     String?       @unique // HMAC-SHA256(phone)，登录/绑定/唯一性查询用
   passwordHash  String?       // 可选：通过验证码登录时可不设置
@@ -35,17 +35,22 @@ model User {
   paymentNodes PaymentNode[]
 }
 
-type UserSettings {
-  currency            String @default("CNY")
-  taxRate             Float  @default(0)
-  paymentReminderDays Int[]  @default([3, 1, 0])
-  defaultPaymentTerms String @default("")
+// 由 MongoDB 的 embedded type 迁移为 1:1 关联表
+model UserSettings {
+  id                  String  @id @default(cuid())
+  userId              String  @unique
+  currency            String  @default("CNY")
+  taxRate             Float   @default(0)
+  paymentReminderDays Int[]   @default([3, 1, 0])
+  defaultPaymentTerms String  @default("")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ── 客户 ──
 model Client {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String   @db.ObjectId
+  id            String   @id @default(cuid())
+  userId        String
   name          String
   contactPerson String   @default("")
   phone         String   @default("")
@@ -73,9 +78,9 @@ model Client {
 
 // ── 项目 ──
 model Project {
-  id            String        @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String        @db.ObjectId
-  clientId      String        @db.ObjectId
+  id            String        @id @default(cuid())
+  userId        String
+  clientId      String
   name          String
   description   String        @default("")
   status        String        @default("quoted") // quoted|in_progress|review|completed|cancelled
@@ -87,7 +92,6 @@ model Project {
   startDate     DateTime?
   deadline      DateTime?
   completedAt   DateTime?
-  deliverables  Deliverable[]
   revisionCount Int           @default(0)
   revisionLimit Int?
   tags          String[]      @default([])
@@ -100,27 +104,35 @@ model Project {
   quotes       Quote[]
   transactions Transaction[]
   paymentNodes PaymentNode[]
+  deliverables Deliverable[]
 
   @@index([userId, status])
   @@index([userId, clientId])
   @@index([userId, deadline])
 }
 
-type Deliverable {
+// 由 MongoDB 的 embedded type 迁移为 1:N 关联表
+model Deliverable {
+  id          String    @id @default(cuid())
+  projectId   String
   name        String
   status      String    @default("pending") // pending|done
   completedAt DateTime?
+  order       Int       @default(0) // 显示顺序
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
 // ── 报价单 ──
 model Quote {
-  id           String      @id @default(auto()) @map("_id") @db.ObjectId
-  userId       String      @db.ObjectId
-  projectId    String?     @db.ObjectId
-  clientId     String      @db.ObjectId
+  id           String      @id @default(cuid())
+  userId       String
+  projectId    String?
+  clientId     String
   quoteNumber  String
   title        String
-  items        QuoteItem[]
   subtotal     Float       @default(0)
   taxRate      Float       @default(0)
   taxAmount    Float       @default(0)
@@ -135,15 +147,19 @@ model Quote {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  user    User     @relation(fields: [userId], references: [id])
-  project Project? @relation(fields: [projectId], references: [id])
-  client  Client   @relation(fields: [clientId], references: [id])
+  user    User        @relation(fields: [userId], references: [id])
+  project Project?    @relation(fields: [projectId], references: [id])
+  client  Client      @relation(fields: [clientId], references: [id])
+  items   QuoteItem[]
 
   @@unique([userId, quoteNumber])
   @@index([userId, status])
 }
 
-type QuoteItem {
+// 由 MongoDB 的 embedded type 迁移为 1:N 关联表
+model QuoteItem {
+  id             String @id @default(cuid())
+  quoteId        String
   name           String
   description    String @default("")
   quantity       Float  @default(1)
@@ -151,19 +167,24 @@ type QuoteItem {
   unitPrice      Float
   amount         Float
   priceReference String @default("")
+  order          Int    @default(0) // 显示顺序
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
 }
 
 // ── 收支记录 ──
 model Transaction {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String   @db.ObjectId
+  id            String   @id @default(cuid())
+  userId        String
   type          String // income|expense
   amount        Float
   category      String
   subcategory   String   @default("")
   description   String   @default("")
-  projectId     String?  @db.ObjectId
-  clientId      String?  @db.ObjectId
+  projectId     String?
+  clientId      String?
   date          DateTime
   paymentMethod String   @default("other") // wechat|alipay|bank_transfer|cash|other
   receiptUrl    String?
@@ -184,56 +205,63 @@ model Transaction {
 
 // ── 收款节点 ──
 model PaymentNode {
-  id               String             @id @default(auto()) @map("_id") @db.ObjectId
-  userId           String             @db.ObjectId
-  projectId        String             @db.ObjectId
-  clientId         String             @db.ObjectId
-  name             String
-  amount           Float
-  dueDate          DateTime
-  status           String             @default("pending") // pending|reminded|paid|overdue
-  paidAt           DateTime?
-  paidAmount       Float              @default(0)
-  reminderCount    Int                @default(0)
-  lastReminderAt   DateTime?
-  reminderMessages ReminderMessage[]
-  notes            String             @default("")
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  id             String    @id @default(cuid())
+  userId         String
+  projectId      String
+  clientId       String
+  name           String
+  amount         Float
+  dueDate        DateTime
+  status         String    @default("pending") // pending|reminded|paid|overdue
+  paidAt         DateTime?
+  paidAmount     Float     @default(0)
+  reminderCount  Int       @default(0)
+  lastReminderAt DateTime?
+  notes          String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  user    User    @relation(fields: [userId], references: [id])
-  project Project @relation(fields: [projectId], references: [id])
-  client  Client  @relation(fields: [clientId], references: [id])
+  user             User              @relation(fields: [userId], references: [id])
+  project          Project           @relation(fields: [projectId], references: [id])
+  client           Client            @relation(fields: [clientId], references: [id])
+  reminderMessages ReminderMessage[]
 
   @@index([userId, status])
   @@index([userId, dueDate])
   @@index([projectId])
 }
 
-type ReminderMessage {
-  sentAt      DateTime
-  channel     String // wechat|sms|email
-  content     String
-  aiGenerated Boolean @default(true)
+// 由 MongoDB 的 embedded type 迁移为 1:N 关联表
+model ReminderMessage {
+  id            String   @id @default(cuid())
+  paymentNodeId String
+  sentAt        DateTime
+  channel       String // wechat|sms|email
+  content       String
+  aiGenerated   Boolean  @default(true)
+
+  paymentNode PaymentNode @relation(fields: [paymentNodeId], references: [id], onDelete: Cascade)
+
+  @@index([paymentNodeId])
 }
 
 // ── 报价反馈（数据回流管道）──
 model PricingFeedback {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @db.ObjectId
-  quoteId     String   @db.ObjectId
-  clientId    String   @db.ObjectId
-  outcome     String   // accepted|rejected|negotiated|expired_no_response
-  finalAmount Float?   // 最终成交金额（negotiated时有值）
-  quoteAmount Float    // 原报价金额
-  deviation   Float?   // 偏差百分比 = (final - quote) / quote * 100
-  category    String   @default("") // 服务类型
-  rejectReason String  @default("") // 拒绝原因：too_expensive|scope_mismatch|competitor|budget_cut|other
-  clientFeedback String @default("") // 客户原话/备注
-  negotiationRounds Int @default(0) // 议价轮数
-  daysToDecision    Int @default(0) // 从发送到决策的天数
-  metadata    String   @default("{}") // JSON: 扩展字段
-  createdAt   DateTime @default(now())
+  id                String   @id @default(cuid())
+  userId            String
+  quoteId           String
+  clientId          String
+  outcome           String // accepted|rejected|negotiated|expired_no_response
+  finalAmount       Float? // 最终成交金额（negotiated时有值）
+  quoteAmount       Float // 原报价金额
+  deviation         Float? // 偏差百分比 = (final - quote) / quote * 100
+  category          String   @default("") // 服务类型
+  rejectReason      String   @default("") // 拒绝原因：too_expensive|scope_mismatch|competitor|budget_cut|other
+  clientFeedback    String   @default("") // 客户原话/备注
+  negotiationRounds Int      @default(0) // 议价轮数
+  daysToDecision    Int      @default(0) // 从发送到决策的天数
+  metadata          String   @default("{}") // JSON: 扩展字段
+  createdAt         DateTime @default(now())
 
   @@index([userId, outcome])
   @@index([userId, category])
@@ -242,19 +270,19 @@ model PricingFeedback {
 
 // ── 经营记忆（Business Memory）──
 model BusinessMemory {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @db.ObjectId
-  memoryType  String   // pricing_pattern|client_preference|seasonal_trend|cost_benchmark|negotiation_insight
-  dimension   String   @default("") // 细分维度：如 "design.logo" / "development.webapp"
-  content     String   // JSON: 记忆内容
-  confidence  Float    @default(0.5) // 置信度 0-1，随数据积累提升
-  dataPoints  Int      @default(1) // 支撑数据点数量
-  lastRefreshedAt DateTime @default(now()) // 上次刷新时间
-  expiresAt   DateTime? // 过期时间（季节性趋势会过期）
-  source      String   @default("system") // system|user_confirmed|ai_inferred
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(cuid())
+  userId          String
+  memoryType      String // pricing_pattern|client_preference|seasonal_trend|cost_benchmark|negotiation_insight
+  dimension       String    @default("") // 细分维度：如 "design.logo" / "development.webapp"
+  content         String // JSON: 记忆内容
+  confidence      Float     @default(0.5) // 置信度 0-1，随数据积累提升
+  dataPoints      Int       @default(1) // 支撑数据点数量
+  lastRefreshedAt DateTime  @default(now()) // 上次刷新时间
+  expiresAt       DateTime? // 过期时间（季节性趋势会过期）
+  source          String    @default("system") // system|user_confirmed|ai_inferred
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([userId, memoryType, isActive])
   @@index([userId, dimension])
@@ -263,21 +291,21 @@ model BusinessMemory {
 
 // ── 知识库文档 ──
 model KnowledgeDoc {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  slug        String   @unique                          // 唯一标识，如 "tax-vat-2026"
-  title       String                                    // 文档标题
-  category    String                                    // tax_policy | contract_law | industry_standard
-  tags        String[]                                  // 匹配关键词，如 ["增值税","小规模","免征"]
-  tasks       String[]                                  // 适用任务类型，如 ["quote.generate","insight.generate"]
-  content     String                                    // Markdown 正文
-  priority    Int      @default(10)                     // 优先级，数字越小越优先
-  region      String   @default("")                     // 适用地区，如 "上海" / "全国"
-  effectiveDate DateTime?                               // 政策生效日期
-  expiresDate   DateTime?                               // 政策失效日期
-  isActive    Boolean  @default(true)
-  version     Int      @default(1)                      // 文档版本号，方便追踪更新
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(cuid())
+  slug          String    @unique // 唯一标识，如 "tax-vat-2026"
+  title         String // 文档标题
+  category      String // tax_policy | contract_law | industry_standard
+  tags          String[] // 匹配关键词，如 ["增值税","小规模","免征"]
+  tasks         String[] // 适用任务类型，如 ["quote.generate","insight.generate"]
+  content       String // Markdown 正文
+  priority      Int       @default(10) // 优先级，数字越小越优先
+  region        String    @default("") // 适用地区，如 "上海" / "全国"
+  effectiveDate DateTime? // 政策生效日期
+  expiresDate   DateTime? // 政策失效日期
+  isActive      Boolean   @default(true)
+  version       Int       @default(1) // 文档版本号，方便追踪更新
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([category, isActive])
   @@index([isActive, tasks])
@@ -285,34 +313,36 @@ model KnowledgeDoc {
 
 // ── AI模板缓存（语义分离隐私保护） ──
 model AITemplateCache {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  task          String
-  intentHash    String   @unique
-  intentParams  Json
-  templates     Json     // string[] 3个模板候选
-  useCount      Int      @default(0)
-  lastUsedAt    DateTime?
-  createdAt     DateTime @default(now())
+  id           String    @id @default(cuid())
+  task         String
+  intentHash   String    @unique
+  intentParams Json
+  templates    Json // string[] 3个模板候选
+  useCount     Int       @default(0)
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
   @@index([task, intentHash])
 }
 
 // ── AI调用日志（隐私审计） ──
 model AICallLog {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String   @db.ObjectId
-  task          String
-  intentParams  Json     // 发送给AI的意图参数（用户可查看）
-  dataSent      String   // "none" | "intent_only" | "anonymized"
-  cacheHit      Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  userId       String
+  task         String
+  intentParams Json // 发送给AI的意图参数（用户可查看）
+  dataSent     String // "none" | "intent_only" | "anonymized"
+  cacheHit     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
   @@index([userId, createdAt])
 }
 
 // ── 用户反馈 ──
 model Feedback {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String   @db.ObjectId
-  type      String   // bug|feature|experience|other
+  id        String   @id @default(cuid())
+  userId    String
+  type      String // bug|feature|experience|other
   content   String
   contact   String   @default("") // 可选联系方式
   createdAt DateTime @default(now())
@@ -322,11 +352,11 @@ model Feedback {
 
 // ── AI 审计日志（五层防御 · 落库） ──
 model AIAuditLog {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  id                String   @id @default(cuid())
   timestamp         DateTime
-  userId            String   @db.ObjectId
+  userId            String
   task              String
-  inputHash         String   // sha256 前 16 位，不存原文
+  inputHash         String // sha256 前 16 位，不存原文
   inputLength       Int
   threats           String[] @default([]) // "critical:role_hijack" 这类串
   sensitiveRedacted String[] @default([])
@@ -345,11 +375,11 @@ model AIAuditLog {
 
 // ── 活动日志 ──
 model ActivityLog {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @db.ObjectId
-  entityType  String   // project|client|quote|payment
-  entityId    String   @db.ObjectId
-  action      String   // created|updated|status_changed|deleted|payment_received|revision|deliverable_done
+  id          String   @id @default(cuid())
+  userId      String
+  entityType  String // project|client|quote|payment
+  entityId    String
+  action      String // created|updated|status_changed|deleted|payment_received|revision|deliverable_done
   description String
   metadata    String   @default("{}") // JSON: { from, to, amount, etc. }
   createdAt   DateTime @default(now())

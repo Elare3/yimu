@@ -60,7 +60,7 @@ export async function emit<T extends keyof EventPayload>(event: T, payload: Even
 on('quote.accepted', async ({ quoteId, userId }) => {
   const quote = await prisma.quote.findUnique({
     where: { id: quoteId },
-    include: { client: true },
+    include: { client: true, items: { orderBy: { order: 'asc' } } },
   });
   if (!quote) return;
 
@@ -105,7 +105,7 @@ on('quote.accepted', async ({ quoteId, userId }) => {
       name: quote.title,
       status: 'in_progress',
       totalAmount: quote.total,
-      category: guessCategory(quote.items as { name: string }[]),
+      category: guessCategory(quote.items),
       startDate: new Date(),
     },
   });
@@ -190,17 +190,11 @@ on('project.status_changed', async ({ projectId, userId, from, to }) => {
         }
 
         case 'markAllDeliverablesComplete': {
-          const proj = await prisma.project.findUnique({ where: { id: projectId } });
-          if (proj && proj.deliverables.length > 0) {
-            const now = new Date();
-            const updated = proj.deliverables.map(d =>
-              d.status === 'pending' ? { ...d, status: 'done', completedAt: now } : d
-            );
-            await prisma.project.update({
-              where: { id: projectId },
-              data: { deliverables: updated },
-            });
-          }
+          // 直接在关联表上批量 update pending → done
+          await prisma.deliverable.updateMany({
+            where: { projectId, status: 'pending' },
+            data: { status: 'done', completedAt: new Date() },
+          });
           break;
         }
 

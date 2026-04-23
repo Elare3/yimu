@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { useKanban } from '@/hooks/useProjects';
@@ -19,8 +19,35 @@ export default function ProjectsPage() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [completedSearch, setCompletedSearch] = useState('');
+  const [searchText, setSearchText] = useState('');
 
   const { columns, completedTotal, isLoading, mutate } = useKanban();
+
+  // 客户端过滤活跃列（已报价/进行中/待审核）—— 搜索 项目名 / 客户名 / 标签 / 备注
+  const filteredColumns = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return columns;
+    const filtered: Record<string, typeof columns[string]> = {};
+    for (const [status, list] of Object.entries(columns)) {
+      filtered[status] = (list as Array<Record<string, unknown>>).filter((p) => {
+        const name = String(p.name || '').toLowerCase();
+        const clientName = String((p.client as { name?: string } | null)?.name || '').toLowerCase();
+        const notes = String(p.notes || '').toLowerCase();
+        const tags = Array.isArray(p.tags) ? (p.tags as string[]).join(' ').toLowerCase() : '';
+        return name.includes(q) || clientName.includes(q) || notes.includes(q) || tags.includes(q);
+      }) as typeof columns[string];
+    }
+    return filtered;
+  }, [columns, searchText]);
+
+  // 搜索结果总数（用于空态提示）
+  const searchHitCount = useMemo(() => {
+    if (!searchText.trim()) return 0;
+    return (['quoted', 'in_progress', 'review'] as const).reduce(
+      (sum, status) => sum + ((filteredColumns[status] as unknown[] | undefined)?.length || 0),
+      0
+    );
+  }, [filteredColumns, searchText]);
 
   // 搜索已完成项目（有搜索词时单独请求）
   const { data: searchData } = useSWR(
@@ -118,11 +145,66 @@ export default function ProjectsPage() {
   return (
     <div className="space-y-6">
       {/* 工具栏 */}
-      <div className="flex items-center justify-end">
-        <Button onClick={() => setShowForm(true)}>
-          + 新建项目
-        </Button>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        {/* 搜索框 */}
+        <div className="relative flex-1 sm:max-w-md">
+          <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-brown-300 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="搜索项目名、客户、标签..."
+            className="w-full pl-10 pr-10 py-2.5 text-sm text-brown-800 bg-white rounded-[12px] border-[1.5px] border-cream-300 outline-none focus:border-caramel focus:ring-2 focus:ring-caramel/15 transition-all duration-200 placeholder:text-brown-300"
+          />
+          {searchText && (
+            <button
+              type="button"
+              onClick={() => setSearchText('')}
+              aria-label="清除搜索"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-brown-300 hover:text-brown-500 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between sm:justify-end gap-3">
+          {searchText.trim() && (
+            <span className="text-xs text-brown-400 whitespace-nowrap">
+              找到 <span className="font-semibold text-brown-800">{searchHitCount}</span> 个
+            </span>
+          )}
+          <Button onClick={() => setShowForm(true)}>
+            + 新建项目
+          </Button>
+        </div>
       </div>
+
+      {/* 搜索提示：未命中活跃列 */}
+      {searchText.trim() && searchHitCount === 0 && (
+        <div className="bg-cream-50 border border-cream-200 rounded-[12px] p-4 text-center text-sm text-brown-400">
+          活跃项目中没有匹配 <span className="font-semibold text-brown-700">「{searchText}」</span> 的结果。
+          {completedTotal > 0 && (
+            <>
+              <span className="mx-1">·</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCompletedSearch(searchText);
+                  setShowCompleted(true);
+                }}
+                className="text-caramel hover:text-caramel-dark underline transition-colors"
+              >
+                在已完成项目中搜索
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 加载状态 — 仅首次无缓存时显示骨架屏 */}
       {isLoading && Object.keys(columns).length === 0 && (
@@ -136,7 +218,7 @@ export default function ProjectsPage() {
       {/* 看板 */}
       {(!isLoading || Object.keys(columns).length > 0) && (
         <KanbanBoard
-          columns={columns}
+          columns={filteredColumns}
           onStatusChange={handleStatusChange}
           onProjectClick={handleProjectClick}
           completedTotal={completedTotal}

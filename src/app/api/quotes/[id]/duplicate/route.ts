@@ -12,6 +12,7 @@ export async function POST(
 
     const original = await prisma.quote.findFirst({
       where: { id: params.id, userId },
+      include: { items: { orderBy: { order: 'asc' } } },
     });
     if (!original) return errorResponse('报价单不存在', 404);
 
@@ -27,7 +28,18 @@ export async function POST(
         projectId: null,
         quoteNumber,
         title: `${original.title}（副本）`,
-        items: original.items,
+        items: {
+          create: original.items.map((item, i) => ({
+            name: item.name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unitPrice: item.unitPrice,
+            amount: item.amount,
+            priceReference: item.priceReference,
+            order: i,
+          })),
+        },
         subtotal: original.subtotal,
         taxRate: original.taxRate,
         taxAmount: original.taxAmount,
@@ -43,6 +55,7 @@ export async function POST(
       include: {
         client: { select: { id: true, name: true } },
         project: { select: { id: true, name: true } },
+        items: { orderBy: { order: 'asc' } },
       },
     });
 

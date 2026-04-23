@@ -243,12 +243,13 @@ export async function smartAdjustQuote(params: {
     include: {
       client: { select: { name: true } },
       project: { select: { name: true } },
+      items: { orderBy: { order: 'asc' } },
     },
   });
   if (!quote) throw new Error('报价单不存在');
 
-  const currentItems = (quote.items as any[]) || [];
-  const currentSummary = currentItems.map((i: any) =>
+  const currentItems = quote.items;
+  const currentSummary = currentItems.map(i =>
     `- ${i.name}: ${i.quantity}${i.unit} × ¥${i.unitPrice} = ¥${i.amount}`
   ).join('\n');
 

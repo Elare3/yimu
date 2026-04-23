@@ -84,7 +84,12 @@ export default withAuth(
     const token = req.nextauth.token;
 
     // ── CSRF 校验：对 /api/ 的写请求检查 Origin/Referer ──
-    if (pathname.startsWith('/api/') && !isCsrfSafe(req)) {
+    // 例外：/api/auth/callback/* 由 NextAuth 自己的双重提交 cookie（next-auth.csrf-token）
+    // 保护 —— 跨站攻击者拿不到该 cookie 也算不出正确的 token|hash，安全等级等价。
+    // 而部分移动浏览器 / 运营商代理 / 微信 WebView 会把 Origin 和 Referer 都剥掉，
+    // 放在这里校验会导致移动端登录/注册全部 403。所以 callback 这段由 NextAuth 独自把关。
+    const isNextAuthCallback = pathname.startsWith('/api/auth/callback/');
+    if (pathname.startsWith('/api/') && !isNextAuthCallback && !isCsrfSafe(req)) {
       return new NextResponse(
         JSON.stringify({ success: false, error: '来源校验失败' }),
         { status: 403, headers: { 'Content-Type': 'application/json' } }
@@ -162,5 +167,6 @@ export const config = {
     '/api/export',
     '/api/export/:path*',
     '/api/auth/callback/:path*',
+    '/api/auth/persist-session',
   ],
 };

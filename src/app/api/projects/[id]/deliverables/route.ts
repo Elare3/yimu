@@ -2,57 +2,75 @@ import { prisma } from '@/lib/prisma';
 import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
 
+/** 找到项目 + 该项目的交付物（按 order 升序） */
+async function getOwnedProjectWithDeliverables(projectId: string, userId: string) {
+  return prisma.project.findFirst({
+    where: { id: projectId, userId },
+    include: { deliverables: { orderBy: { order: 'asc' } } },
+  });
+}
+
 // PUT /api/projects/[id]/deliverables — 切换交付物完成状态
+// 兼容旧 API：可用 index（序号）或 deliverableId（关联表 id）
 export async function PUT(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const userId = await requireUserId();
-    const { index, status } = await req.json();
+    const { index, deliverableId, status } = await req.json();
 
-    if (index === undefined || index < 0) {
-      return errorResponse('请指定交付物序号');
-    }
     if (!status || !['pending', 'done'].includes(status)) {
       return errorResponse('状态只能为 pending 或 done');
     }
 
-    const project = await prisma.project.findFirst({
-      where: { id: params.id, userId },
-    });
+    const project = await getOwnedProjectWithDeliverables(params.id, userId);
     if (!project) return errorResponse('项目不存在', 404);
 
-    const deliverables = [...(project.deliverables || [])];
-    if (index >= deliverables.length) {
-      return errorResponse('交付物序号超出范围');
+    // 定位目标交付物
+    let target = project.deliverables.find(d => d.id === deliverableId);
+    if (!target && typeof index === 'number' && index >= 0 && index < project.deliverables.length) {
+      target = project.deliverables[index];
     }
+    if (!target) return errorResponse('交付物不存在');
 
-    deliverables[index] = {
-      ...deliverables[index],
-      status,
-      completedAt: status === 'done' ? new Date() : null,
-    };
+    await prisma.deliverable.update({
+      where: { id: target.id },
+      data: {
+        status,
+        completedAt: status === 'done' ? new Date() : null,
+      },
+    });
 
-    const updateData: Record<string, unknown> = { deliverables };
+    // 重新拉一遍最新列表，判断是否全部完成
+    const updatedDeliverables = await prisma.deliverable.findMany({
+      where: { projectId: params.id },
+      orderBy: { order: 'asc' },
+    });
 
-    // 自动完工判断：当所有交付物标记完成时，检查收款是否也全部完成
-    if (status === 'done' && deliverables.every((d: { status: string }) => d.status === 'done')) {
-      if (['in_progress', 'review'].includes(project.status)) {
-        const unpaidPayments = await prisma.paymentNode.count({
-          where: { projectId: params.id, status: { not: 'paid' } },
-        });
-        if (unpaidPayments === 0) {
-          updateData.status = 'completed';
-          updateData.completedAt = new Date();
-        }
+    const extraUpdate: Record<string, unknown> = {};
+    if (
+      status === 'done' &&
+      updatedDeliverables.length > 0 &&
+      updatedDeliverables.every(d => d.status === 'done') &&
+      ['in_progress', 'review'].includes(project.status)
+    ) {
+      const unpaidPayments = await prisma.paymentNode.count({
+        where: { projectId: params.id, status: { not: 'paid' } },
+      });
+      if (unpaidPayments === 0) {
+        extraUpdate.status = 'completed';
+        extraUpdate.completedAt = new Date();
       }
     }
 
     const updated = await prisma.project.update({
       where: { id: params.id },
-      data: updateData,
-      include: { client: { select: { id: true, name: true } } },
+      data: extraUpdate,
+      include: {
+        client: { select: { id: true, name: true } },
+        deliverables: { orderBy: { order: 'asc' } },
+      },
     });
 
     return successResponse(updated);
@@ -77,18 +95,33 @@ export async function POST(
 
     const project = await prisma.project.findFirst({
       where: { id: params.id, userId },
+      select: { id: true },
     });
     if (!project) return errorResponse('项目不存在', 404);
 
-    const deliverables = [
-      ...(project.deliverables || []),
-      { name: name.trim(), status: 'pending', completedAt: null },
-    ];
+    // 下一个 order
+    const last = await prisma.deliverable.findFirst({
+      where: { projectId: params.id },
+      orderBy: { order: 'desc' },
+      select: { order: true },
+    });
+    const nextOrder = (last?.order ?? -1) + 1;
 
-    const updated = await prisma.project.update({
+    await prisma.deliverable.create({
+      data: {
+        projectId: params.id,
+        name: name.trim(),
+        status: 'pending',
+        order: nextOrder,
+      },
+    });
+
+    const updated = await prisma.project.findUnique({
       where: { id: params.id },
-      data: { deliverables },
-      include: { client: { select: { id: true, name: true } } },
+      include: {
+        client: { select: { id: true, name: true } },
+        deliverables: { orderBy: { order: 'asc' } },
+      },
     });
 
     return successResponse(updated);
@@ -101,34 +134,32 @@ export async function POST(
 }
 
 // DELETE /api/projects/[id]/deliverables — 删除交付物
+// 兼容旧 API：可用 index 或 deliverableId
 export async function DELETE(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const userId = await requireUserId();
-    const { index } = await req.json();
+    const { index, deliverableId } = await req.json();
 
-    if (index === undefined || index < 0) {
-      return errorResponse('请指定交付物序号');
-    }
-
-    const project = await prisma.project.findFirst({
-      where: { id: params.id, userId },
-    });
+    const project = await getOwnedProjectWithDeliverables(params.id, userId);
     if (!project) return errorResponse('项目不存在', 404);
 
-    const deliverables = [...(project.deliverables || [])];
-    if (index >= deliverables.length) {
-      return errorResponse('交付物序号超出范围');
+    let target = project.deliverables.find(d => d.id === deliverableId);
+    if (!target && typeof index === 'number' && index >= 0 && index < project.deliverables.length) {
+      target = project.deliverables[index];
     }
+    if (!target) return errorResponse('交付物不存在');
 
-    deliverables.splice(index, 1);
+    await prisma.deliverable.delete({ where: { id: target.id } });
 
-    const updated = await prisma.project.update({
+    const updated = await prisma.project.findUnique({
       where: { id: params.id },
-      data: { deliverables },
-      include: { client: { select: { id: true, name: true } } },
+      include: {
+        client: { select: { id: true, name: true } },
+        deliverables: { orderBy: { order: 'asc' } },
+      },
     });
 
     return successResponse(updated);

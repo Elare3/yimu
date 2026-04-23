@@ -24,6 +24,7 @@ export async function GET(
         },
         project: { select: { name: true } },
         user: { select: { name: true, companyName: true, phone: true } },
+        items: { orderBy: { order: 'asc' } },
       },
     });
 
