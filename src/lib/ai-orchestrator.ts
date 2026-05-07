@@ -7,6 +7,15 @@ import { prisma } from './prisma';
 import { callAI, getModelForTask, validateQuoteResponse, validateTransactionResponse } from './ai';
 import { secureCallAI, validateAIOutput, logAIAudit, hashInput } from './security';
 import {
+  QuoteResponseSchema,
+  QuoteAdjustResponseSchema,
+  TransactionParseResponseSchema,
+  ClassifyResponseSchema,
+  // BatchClassifyResponseSchema 未启用：DashScope JSON mode 强制对象顶层，
+  // 而批量分类 prompt 期望数组，schema 校验会失败。后续配合改 prompt 一起接入。
+  ContractResponseSchema,
+} from './ai-schemas';
+import {
   TRANSACTION_INFERENCE_RULES,
   QUOTE_VALIDATION_RULES,
   PAYMENT_SPLIT_RULES,
@@ -23,16 +32,190 @@ import {
   CONTRACT_SYSTEM_PROMPT, buildContractPrompt,
 } from './prompts';
 import { getRelevantKnowledge } from './knowledge';
-import { formatDate } from './utils';
+import {
+  formatDate,
+  beijingMonthRange,
+  beijingQuarterStart,
+  beijingYMD,
+  beijingMidnight,
+} from './utils';
 import {
   buildReminderIntent,
   buildQuoteIntent,
   buildInsightIntent,
   extractKeywords,
+  tierAcceptRate,
 } from './semantic-intent';
 import { getOrGenerateTemplate, fillTemplate, getFallbackTemplate } from './template-cache';
+import { type ProgressEmit, noopEmit } from './ai-stream';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+// ════════════════════════════════════════
+// 0. 报价历史信号聚合（喂回 AI：越用越懂你）
+// ════════════════════════════════════════
+
+export interface PricingFeedbackStats {
+  /** 总样本数 */
+  totalCount: number;
+  /** 接受率 0-1 */
+  acceptRate: number;
+  /** 议价率（最终成交但有调整） 0-1 */
+  negotiationRate: number;
+  /** 拒绝率 0-1 */
+  rejectRate: number;
+  /** 流失率（发出后无回应） 0-1 */
+  expiredRate: number;
+  /** 平均偏差：正=用户上调成交，负=被砍价；null=样本不足 */
+  avgDeviation: number | null;
+  /** 最高频拒绝原因 */
+  topRejectReason: string | null;
+  /** 该原因占拒绝样本的比例 */
+  topRejectReasonRatio: number;
+  /** 议价单的平均轮数 */
+  avgNegotiationRounds: number;
+  /** 平均决策天数（成交+拒绝） */
+  avgDaysToDecision: number;
+}
+
+/**
+ * 聚合用户最近 N 单报价反馈，作为 AI 报价生成的历史信号
+ *
+ * - 至少 3 个样本才返回，否则返回 null（信号噪声大没意义）
+ * - 默认看最近 90 天
+ * - 可按 category 过滤（同业务类型的反馈更相关）
+ */
+export async function getPricingFeedbackStats(
+  userId: string,
+  category?: string,
+  options: { days?: number; minSamples?: number } = {},
+): Promise<PricingFeedbackStats | null> {
+  const days = options.days ?? 90;
+  const minSamples = options.minSamples ?? 3;
+
+  if (userId === 'anonymous') return null;
+
+  const since = new Date(Date.now() - days * 86400_000);
+
+  try {
+    const feedbacks = await prisma.pricingFeedback.findMany({
+      where: {
+        userId,
+        createdAt: { gte: since },
+        ...(category ? { category } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50, // 防止历史数据过多拖慢
+    });
+
+    if (feedbacks.length < minSamples) return null;
+
+    const total = feedbacks.length;
+    const accepted = feedbacks.filter(f => f.outcome === 'accepted').length;
+    const negotiated = feedbacks.filter(f => f.outcome === 'negotiated').length;
+    const rejected = feedbacks.filter(f => f.outcome === 'rejected').length;
+    const expired = feedbacks.filter(f => f.outcome === 'expired_no_response').length;
+
+    // 平均偏差：只统计有 deviation 字段的（accepted/negotiated 通常都有）
+    const withDeviation = feedbacks.filter(f => typeof f.deviation === 'number');
+    const avgDeviation = withDeviation.length > 0
+      ? withDeviation.reduce((sum, f) => sum + (f.deviation ?? 0), 0) / withDeviation.length
+      : null;
+
+    // 拒绝原因频次
+    const rejectReasons = feedbacks
+      .filter(f => f.outcome === 'rejected' && f.rejectReason)
+      .map(f => f.rejectReason);
+    const reasonCount = new Map<string, number>();
+    for (const r of rejectReasons) reasonCount.set(r, (reasonCount.get(r) ?? 0) + 1);
+    let topRejectReason: string | null = null;
+    let topRejectCount = 0;
+    for (const [reason, count] of reasonCount) {
+      if (count > topRejectCount) { topRejectReason = reason; topRejectCount = count; }
+    }
+    const topRejectReasonRatio = rejected > 0 ? topRejectCount / rejected : 0;
+
+    // 议价轮数（仅议价样本）
+    const negotiationRounds = feedbacks
+      .filter(f => f.outcome === 'negotiated' && f.negotiationRounds > 0)
+      .map(f => f.negotiationRounds);
+    const avgNegotiationRounds = negotiationRounds.length > 0
+      ? negotiationRounds.reduce((a, b) => a + b, 0) / negotiationRounds.length
+      : 0;
+
+    // 决策天数（仅成交+拒绝，过期那种没意义）
+    const decisionDays = feedbacks
+      .filter(f => ['accepted', 'negotiated', 'rejected'].includes(f.outcome) && f.daysToDecision > 0)
+      .map(f => f.daysToDecision);
+    const avgDaysToDecision = decisionDays.length > 0
+      ? decisionDays.reduce((a, b) => a + b, 0) / decisionDays.length
+      : 0;
+
+    return {
+      totalCount: total,
+      acceptRate: accepted / total,
+      negotiationRate: negotiated / total,
+      rejectRate: rejected / total,
+      expiredRate: expired / total,
+      avgDeviation,
+      topRejectReason,
+      topRejectReasonRatio,
+      avgNegotiationRounds: Math.round(avgNegotiationRounds * 10) / 10,
+      avgDaysToDecision: Math.round(avgDaysToDecision * 10) / 10,
+    };
+  } catch {
+    // 查询失败不影响主流程
+    return null;
+  }
+}
+
+/**
+ * 把 PricingFeedbackStats 转成可读的中文要点（喂给 AI 的 prompt 段落）
+ *
+ * 策略：把"原始数字"转成"AI 能据此调整定价的判断"
+ * - 平均偏差 < -0.05 → 提醒"用户经常被砍价，建议预留 5-10% 议价空间"
+ * - 拒绝原因 too_expensive 占比 > 50% → "当前报价偏高于客户预期，请贴近行业中位数"
+ * - 议价轮数 > 2 → "客户议价频繁，首报可适度上浮"
+ */
+export function describePricingFeedback(stats: PricingFeedbackStats): string {
+  const lines: string[] = [];
+  lines.push(`样本数：${stats.totalCount} 单（近 90 天）`);
+  lines.push(`成交分布：直接接受 ${(stats.acceptRate * 100).toFixed(0)}%，议价后成交 ${(stats.negotiationRate * 100).toFixed(0)}%，拒绝 ${(stats.rejectRate * 100).toFixed(0)}%`);
+
+  if (stats.avgDeviation !== null) {
+    const pct = (stats.avgDeviation * 100).toFixed(1);
+    if (stats.avgDeviation < -0.05) {
+      lines.push(`平均偏差：最终成交比报价低 ${Math.abs(parseFloat(pct))}% → 用户经常被砍价，本次定价可预留 5-10% 议价空间`);
+    } else if (stats.avgDeviation > 0.05) {
+      lines.push(`平均偏差：最终成交比报价高 ${pct}% → 用户首报通常偏保守，可适度上调`);
+    } else {
+      lines.push(`平均偏差：${pct}% → 报价基本贴合成交价，沿用现有水位`);
+    }
+  }
+
+  if (stats.topRejectReason && stats.topRejectReasonRatio > 0.5) {
+    const reasonLabel: Record<string, string> = {
+      too_expensive: '客户觉得价格高 → 本次请贴近行业中位数下限，避免过度溢价',
+      scope_mismatch: '需求范围不匹配 → 本次请把项目拆分得更清晰，让客户看清每项价值',
+      competitor: '客户选择竞品 → 强化差异化（资历/案例/交付速度），不要陷入纯价格战',
+      budget_cut: '客户预算调整 → 提供 2 档报价（标准/精简版）让客户选',
+      other: '杂项原因',
+    };
+    lines.push(`主要拒绝原因（${(stats.topRejectReasonRatio * 100).toFixed(0)}%）：${reasonLabel[stats.topRejectReason] ?? stats.topRejectReason}`);
+  }
+
+  if (stats.avgNegotiationRounds >= 2) {
+    lines.push(`平均议价 ${stats.avgNegotiationRounds} 轮成交 → 客户惯于多轮砍价，首报可适度上浮 5-8%`);
+  } else if (stats.avgNegotiationRounds > 0 && stats.avgNegotiationRounds < 1.5) {
+    lines.push(`平均议价 ${stats.avgNegotiationRounds} 轮成交 → 客户决策较快，价格不要预留太多缓冲`);
+  }
+
+  if (stats.avgDaysToDecision > 0) {
+    lines.push(`平均决策周期 ${stats.avgDaysToDecision} 天`);
+  }
+
+  return lines.join('\n');
+}
 
 // ════════════════════════════════════════
 // 1. 报价：AI生成 → 规则校验 → 付款方案 → 返回
@@ -103,13 +286,16 @@ export async function smartGenerateQuote(params: {
     }
   }
 
+  // ── Step 0.5: 读取 PricingFeedback 历史信号（"越用越懂你"的真实事实层） ──
+  const pricingStats = await getPricingFeedbackStats(userId, params.category);
+
   // ── Step 1: 语义分离 — 从需求文本提取关键词（自动过滤手机号邮箱等隐私） ──
   const requirementKeywords = extractKeywords(params.requirement);
   const clientProjectCount = userId !== 'anonymous'
     ? await prisma.project.count({ where: { userId, client: { name: params.clientName } } })
     : 0;
 
-  const intent = buildQuoteIntent({
+  const baseIntent = buildQuoteIntent({
     serviceType: params.businessType,
     requirementText: params.requirement,
     requirementKeywords,
@@ -117,6 +303,21 @@ export async function smartGenerateQuote(params: {
     clientProjectCount,
     deadline: undefined,
   });
+
+  // 把历史信号合并进 intent — 用层级标签而非精确数字，避免哈希过敏感
+  const intent = pricingStats ? {
+    ...baseIntent,
+    historicalAcceptTier: tierAcceptRate(pricingStats.acceptRate),
+    historicalDeviationDirection:
+      pricingStats.avgDeviation === null ? 'unknown' :
+      pricingStats.avgDeviation < -0.05 ? 'often_negotiated_down' :
+      pricingStats.avgDeviation > 0.05 ? 'often_adjusted_up' : 'stable',
+    historicalNegotiationStyle:
+      pricingStats.avgNegotiationRounds >= 2 ? 'haggle_heavy' :
+      pricingStats.avgNegotiationRounds > 0 ? 'quick_decide' : 'unknown',
+    historicalTopRejectReason: pricingStats.topRejectReason ?? 'none',
+    historicalSampleSize: pricingStats.totalCount,
+  } : baseIntent;
 
   // ── Step 2: 检查隐私模式 ──
   let isStrictMode = false;
@@ -144,6 +345,8 @@ export async function smartGenerateQuote(params: {
     return { success: false, error: '严格隐私模式下暂不支持AI报价生成，请切换到标准模式或手动创建报价' };
   }
 
+  const pricingFeedbackSummary = pricingStats ? describePricingFeedback(pricingStats) : undefined;
+
   const secureResult = await secureCallAI({
     userId,
     task: 'quote.generate',
@@ -156,9 +359,11 @@ export async function smartGenerateQuote(params: {
       businessType: params.businessType,
       clientName: '客户',  // 语义分离：不发送真实客户名
       historicalAvgPrice: memoryContext.historicalAvgPrice,
+      pricingFeedbackSummary,  // 新增：PricingFeedback 喂回
     }) + (memoryContext.pricingHints ? `\n\n【用户历史经营数据参考】\n${memoryContext.pricingHints}\n请参考以上历史数据，让报价更贴合用户的定价风格和客户群体。` : ''),
     temperature: 0.7,
     maxTokens: 3000,
+    schema: QuoteResponseSchema,
   });
 
   // 记录AI调用日志（仅发送意图参数）
@@ -170,7 +375,9 @@ export async function smartGenerateQuote(params: {
     return { success: false, error: secureResult.error || 'AI生成报价失败' };
   }
 
-  const aiResult = secureResult.data;
+  // 注：secureCallAI 已用 QuoteResponseSchema 做了 Zod 校验；这里 cast any 是为了保留
+  // 既有的"宽松字段访问"代码风格（例如 discount 既可能是数字也可能是对象，要按对象访问 .amount）
+  const aiResult = secureResult.data as any;
   if (!validateQuoteResponse(aiResult)) {
     return { success: false, error: 'AI生成的报价格式异常，请重试' };
   }
@@ -298,13 +505,15 @@ ${params.instruction}
     buildPromptFn: () => userPrompt,
     temperature: 0.5,
     maxTokens: 3000,
+    schema: QuoteAdjustResponseSchema,
   });
 
   if (!secureResult.success) {
     return { success: false, error: secureResult.error || 'AI调整报价失败' };
   }
 
-  const aiResult = secureResult.data;
+  // 同上：schema 已校验，cast any 沿用既有访问风格
+  const aiResult = secureResult.data as any;
 
   // 规则引擎校验
   const items = (aiResult.items || []).map((item: any) => {
@@ -367,16 +576,18 @@ export async function smartParseTransaction(input: string, userId?: string) {
     systemPrompt: TRANSACTION_SYSTEM_PROMPT,
     buildPromptFn: (sanitized) => buildTransactionParsePrompt(sanitized, today),
     temperature: 0.3,
+    schema: TransactionParseResponseSchema,
   });
 
   if (!secureResult.success) {
     return { success: false, error: secureResult.error || 'AI解析失败' };
   }
 
-  const aiResult = secureResult.data;
+  // schema 是 union(单笔 | { transactions: [] })；这里 cast any 让分支访问更顺手
+  const aiResult = secureResult.data as any;
 
   const isMultiple = aiResult.transactions && Array.isArray(aiResult.transactions);
-  const transactions = isMultiple ? aiResult.transactions : [aiResult];
+  const transactions: any[] = isMultiple ? aiResult.transactions : [aiResult];
 
   for (const tx of transactions) {
     if (!validateTransactionResponse(tx)) {
@@ -453,12 +664,13 @@ export async function smartClassifyTransaction(params: {
   // Step 2: 调AI分类（内部数据，直接调用 + 输出验证 + 审计）
   const startTime = Date.now();
   const userPrompt = buildClassifyPrompt(type, description, amount);
-  const aiResult = await callAI({
+  const { data: aiResult, usage } = await callAI({
     task: 'transaction.classify',
     systemPrompt: CLASSIFY_SYSTEM_PROMPT,
     userPrompt,
     temperature: 0.2,
     maxTokens: 500,
+    schema: ClassifyResponseSchema,
   });
 
   const validation = validateAIOutput(aiResult, 'transaction.classify');
@@ -474,6 +686,7 @@ export async function smartClassifyTransaction(params: {
     outputIssues: validation.issues,
     model: getModelForTask('transaction.classify'),
     latencyMs: Date.now() - startTime,
+    tokenUsage: usage,
   });
 
   if (!aiResult.category) {
@@ -516,7 +729,7 @@ export async function smartBatchClassify(records: { id: string; type: string; de
   if (needAI.length > 0) {
     const batchStartTime = Date.now();
     const userPrompt = buildBatchClassifyPrompt(needAI);
-    const aiResult = await callAI({
+    const { data: aiResult, usage } = await callAI({
       task: 'transaction.classify',
       systemPrompt: CLASSIFY_SYSTEM_PROMPT,
       userPrompt,
@@ -537,6 +750,7 @@ export async function smartBatchClassify(records: { id: string; type: string; de
       outputIssues: validation.issues,
       model: getModelForTask('transaction.classify'),
       latencyMs: Date.now() - batchStartTime,
+      tokenUsage: usage,
     });
 
     const aiResults = Array.isArray(aiResult) ? aiResult : aiResult.results || aiResult.classifications || [];
@@ -599,12 +813,6 @@ export async function smartGenerateReminder(params: {
   });
 
   // ── Step 4: 获取模板（严格模式跳过AI，直接用兜底模板） ──
-  const reminderKnowledge = await getRelevantKnowledge(
-    'reminder.generate',
-    ['催款', '逾期', intent.overdueTier].join(' ')
-  );
-  const enhancedReminderPrompt = REMINDER_SYSTEM_PROMPT + reminderKnowledge.injection;
-
   let template: string;
   let cacheHit = false;
 
@@ -615,7 +823,19 @@ export async function smartGenerateReminder(params: {
       data: { userId: params.userId, task: 'reminder', intentParams: intent as any, dataSent: 'none', cacheHit: false },
     });
   } else {
-    const result = await getOrGenerateTemplate('reminder', intent, enhancedReminderPrompt, params.userId);
+    // 知识库延迟加载：仅缓存未命中时才查询并拼接
+    const result = await getOrGenerateTemplate(
+      'reminder',
+      intent,
+      async () => {
+        const reminderKnowledge = await getRelevantKnowledge(
+          'reminder.generate',
+          ['催款', '逾期', intent.overdueTier].join(' ')
+        );
+        return REMINDER_SYSTEM_PROMPT + reminderKnowledge.injection;
+      },
+      params.userId,
+    );
     template = result.template;
     cacheHit = result.cacheHit;
   }
@@ -694,15 +914,23 @@ export interface InsightContext {
 export async function gatherInsightContext(userId: string): Promise<InsightContext> {
   const now = new Date();
 
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  // 时区策略：所有月份/年份/季度边界按北京时间（UTC+8）算。原版用 new Date(yyyy, mm, 1)
+  // 走服务器 TZ，UTC 服务器会把"北京 5/1 00:30"的交易切到 4 月份，月度同比/环比全错。
+  const { year, month } = beijingYMD(now); // month 1..12
+  const { start: monthStart, end: monthEnd } = beijingMonthRange(year, month);
+  const lastMonthY = month === 1 ? year - 1 : year;
+  const lastMonthM = month === 1 ? 12 : month - 1;
+  const { start: lastMonthStart } = beijingMonthRange(lastMonthY, lastMonthM);
   const lastMonthEnd = monthStart;
-  const monthBeforeLastStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  const beforeLastY = lastMonthM === 1 ? lastMonthY - 1 : lastMonthY;
+  const beforeLastM = lastMonthM === 1 ? 12 : lastMonthM - 1;
+  const { start: monthBeforeLastStart } = beijingMonthRange(beforeLastY, beforeLastM);
   const monthBeforeLastEnd = lastMonthStart;
-  const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-  const yearStart = new Date(now.getFullYear(), 0, 1);
-  const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+  const threeAgoY = beforeLastM === 1 ? beforeLastY - 1 : beforeLastY;
+  const threeAgoM = beforeLastM === 1 ? 12 : beforeLastM - 1;
+  const { start: threeMonthsAgo } = beijingMonthRange(threeAgoY, threeAgoM);
+  const { start: yearStart } = beijingMonthRange(year, 1);
+  const quarterStart = beijingQuarterStart(now);
 
   const [
     monthIncomeAgg, monthExpenseAgg,
@@ -724,8 +952,9 @@ export async function gatherInsightContext(userId: string): Promise<InsightConte
     prisma.transaction.aggregate({ where: { userId, type: 'expense', date: { gte: yearStart, lt: monthEnd } }, _sum: { amount: true } }),
     prisma.transaction.aggregate({ where: { userId, type: 'income', date: { gte: quarterStart, lt: monthEnd } }, _sum: { amount: true } }),
     prisma.transaction.groupBy({ by: ['category'], where: { userId, type: 'expense', date: { gte: monthStart, lt: monthEnd } }, _sum: { amount: true } }),
-    prisma.paymentNode.findMany({ where: { userId, status: { in: ['pending', 'reminded'] }, dueDate: { lt: now } }, include: { project: { select: { name: true } }, client: { select: { name: true } } }, orderBy: { dueDate: 'asc' }, take: 10 }),
-    prisma.paymentNode.findMany({ where: { userId, status: { in: ['pending', 'reminded'] }, dueDate: { gte: now } }, include: { project: { select: { name: true } }, client: { select: { name: true } } }, orderBy: { dueDate: 'asc' }, take: 10 }),
+    // 逾期/未到期分界线：北京今天 00:00（= 昨天 24:00），保证截止当天 24:00 前不算逾期
+    prisma.paymentNode.findMany({ where: { userId, status: { in: ['pending', 'reminded'] }, dueDate: { lt: beijingMidnight(now) } }, include: { project: { select: { name: true } }, client: { select: { name: true } } }, orderBy: { dueDate: 'asc' }, take: 10 }),
+    prisma.paymentNode.findMany({ where: { userId, status: { in: ['pending', 'reminded'] }, dueDate: { gte: beijingMidnight(now) } }, include: { project: { select: { name: true } }, client: { select: { name: true } } }, orderBy: { dueDate: 'asc' }, take: 10 }),
     prisma.transaction.groupBy({ by: ['clientId'], where: { userId, type: 'income', date: { gte: monthStart, lt: monthEnd }, clientId: { not: null } }, _sum: { amount: true }, orderBy: { _sum: { amount: 'desc' } }, take: 10 }),
     prisma.transaction.groupBy({ by: ['clientId'], where: { userId, date: { gte: threeMonthsAgo }, clientId: { not: null } }, _count: true }),
     prisma.project.count({ where: { userId, status: { in: ['in_progress', 'review'] } } }),
@@ -952,12 +1181,22 @@ export function buildRulesInsightResponse(ctx: InsightContext) {
  * AI深度洞察（规则 + AI）— 用户点击时调用
  * 在规则结果基础上叠加AI的深度分析建议
  * AI失败时降级返回纯规则结果
+ *
+ * `onProgress` —— 流式调用方传进来后，会在每个阶段发出进度事件，让 UI 把"卡住的 spinner"变成"动起来的进度提示"。
+ *  非流式调用方完全不传，沿用旧行为（noopEmit 啥也不干）。
  */
-export async function smartGenerateInsight(userId: string) {
+export async function smartGenerateInsight(
+  userId: string,
+  options: { onProgress?: ProgressEmit } = {},
+) {
+  const emit = options.onProgress ?? noopEmit;
+
   // ── Step 1: 聚合数据 + 规则引擎计算（100%本地） ──
+  emit({ phase: 'gathering', message: '收集本月经营数据...' });
   const ctx = await gatherInsightContext(userId);
 
   // ── Step 2: 健康分已在 gatherInsightContext 中用 HEALTH_SCORE_RULES 计算完毕 ──
+  emit({ phase: 'rules', message: '规则引擎评分中...' });
 
   // ── Step 3: 检查隐私模式 ──
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { privacyMode: true } });
@@ -981,7 +1220,7 @@ export async function smartGenerateInsight(userId: string) {
     activeProjects: ctx.activeProjectCount,
     hasLeads: ctx.pipelineProjects.length > 0,
     entityType: ctx.entityType,
-    currentMonth: new Date().getMonth() + 1,
+    currentMonth: beijingYMD().month,
     quarterIncome: ctx.quarterIncome,
     yearProfit: ctx.yearIncome - ctx.yearExpense,
   });
@@ -991,19 +1230,28 @@ export async function smartGenerateInsight(userId: string) {
   let cacheHit = false;
 
   if (!isStrictMode) {
-    const insightKnowledge = await getRelevantKnowledge(
-      'insight.generate',
-      [ctx.entityType || '', '经营', '税收', '利润'].join(' '),
-      { city: (ctx as any).city }
-    );
-    const enhancedInsightPrompt = INSIGHT_SYSTEM_PROMPT + insightKnowledge.injection;
-
+    emit({ phase: 'ai', message: '小木深度思考中...' });
     try {
-      const result = await getOrGenerateTemplate('insight', intent, enhancedInsightPrompt, userId);
+      // 知识库延迟加载：仅缓存未命中时才查询并拼接
+      const result = await getOrGenerateTemplate(
+        'insight',
+        intent,
+        async () => {
+          const insightKnowledge = await getRelevantKnowledge(
+            'insight.generate',
+            [ctx.entityType || '', '经营', '税收', '利润'].join(' '),
+            { city: (ctx as any).city }
+          );
+          return INSIGHT_SYSTEM_PROMPT + insightKnowledge.injection;
+        },
+        userId,
+      );
       aiInsightContent = result.template;
       cacheHit = result.cacheHit;
+      emit({ phase: 'ai-done', message: cacheHit ? '小木命中过往经验...' : '小木分析完成...' });
     } catch (err) {
       console.warn('[INSIGHT] AI模板获取失败，降级为纯规则洞察:', err);
+      emit({ phase: 'ai-fallback', message: 'AI 不可用，仅展示规则洞察' });
     }
   } else {
     // 严格模式：记录日志，使用兜底模板
@@ -1080,8 +1328,14 @@ export async function smartGenerateContract(params: {
   afterSupportDays?: number;
   customClauses?: string[];
   userId?: string;
+  /** 流式调用方传入；非流式调用方不传，沿用旧行为 */
+  onProgress?: ProgressEmit;
 }) {
+  const emit = params.onProgress ?? noopEmit;
+  emit({ phase: 'preparing', message: '准备合同条款模板...' });
+
   // Step 1: 通过安全入口调用AI（五层防御）
+  emit({ phase: 'ai', message: '小木撰写合同条款中...' });
   const secureResult = await secureCallAI({
     userId: params.userId || 'anonymous',
     task: 'contract.generate',
@@ -1093,13 +1347,16 @@ export async function smartGenerateContract(params: {
     }),
     temperature: 0.4,
     maxTokens: 4000,
+    schema: ContractResponseSchema,
   });
 
   if (!secureResult.success) {
     return { success: false, error: secureResult.error || 'AI合同生成失败' };
   }
 
-  const aiResult = secureResult.data;
+  emit({ phase: 'validating', message: '校验合同条款完整性...' });
+  // schema 已校验过；这里 cast any 沿用既有访问风格
+  const aiResult = secureResult.data as any;
 
   // Step 2: 结构校验
   if (!aiResult.clauses || !Array.isArray(aiResult.clauses) || aiResult.clauses.length < 8) {

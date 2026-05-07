@@ -219,35 +219,35 @@ describe('测试5：催款升级策略', () => {
 
 // ── 测试6：记账分类关键词匹配 ──
 describe('测试6：记账分类关键词匹配', () => {
-  it('"阿里云ECS续费" → cloud_infra/cloud_server, isDeductible=true', () => {
+  it('"阿里云ECS续费" → 云服务/云服务器, isDeductible=true', () => {
     const result = TRANSACTION_INFERENCE_RULES.tryLocalClassify('阿里云ECS续费');
     expect(result).not.toBeNull();
-    expect(result!.category).toBe('cloud_infra');
-    expect(result!.subcategory).toBe('cloud_server');
+    expect(result!.category).toBe('云服务');
+    expect(result!.subcategory).toBe('云服务器');
     expect(result!.isDeductible).toBe(true);
   });
 
-  it('"百炼API月费" → ai_api/dashscope, isDeductible=true', () => {
+  it('"百炼API月费" → AI服务/通义千问, isDeductible=true', () => {
     const result = TRANSACTION_INFERENCE_RULES.tryLocalClassify('百炼API月费');
     expect(result).not.toBeNull();
-    expect(result!.category).toBe('ai_api');
-    expect(result!.subcategory).toBe('dashscope');
+    expect(result!.category).toBe('AI服务');
+    expect(result!.subcategory).toBe('通义千问');
     expect(result!.isDeductible).toBe(true);
   });
 
-  it('"午饭外卖" → living/meal, isDeductible=false', () => {
+  it('"午饭外卖" → 生活开支/餐饮, isDeductible=false', () => {
     const result = TRANSACTION_INFERENCE_RULES.tryLocalClassify('午饭外卖');
     expect(result).not.toBeNull();
-    expect(result!.category).toBe('living');
-    expect(result!.subcategory).toBe('meal');
+    expect(result!.category).toBe('生活开支');
+    expect(result!.subcategory).toBe('餐饮');
     expect(result!.isDeductible).toBe(false);
   });
 
-  it('"Figma年费" → software_sub/design_tool, isDeductible=true', () => {
+  it('"Figma年费" → 软件订阅/设计工具, isDeductible=true', () => {
     const result = TRANSACTION_INFERENCE_RULES.tryLocalClassify('Figma年费');
     expect(result).not.toBeNull();
-    expect(result!.category).toBe('software_sub');
-    expect(result!.subcategory).toBe('design_tool');
+    expect(result!.category).toBe('软件订阅');
+    expect(result!.subcategory).toBe('设计工具');
     expect(result!.isDeductible).toBe(true);
   });
 
@@ -457,6 +457,14 @@ function createMockPrisma() {
         store.paymentNodes.set(id, node);
         return node;
       }),
+      createMany: vi.fn(async ({ data }: any) => {
+        const rows = Array.isArray(data) ? data : [data];
+        for (const d of rows) {
+          const id = nextId();
+          store.paymentNodes.set(id, { id, ...d, reminderCount: 0 });
+        }
+        return { count: rows.length };
+      }),
       findUnique: vi.fn(async ({ where, include }: any) => {
         const n = store.paymentNodes.get(where.id);
         if (!n) return null;
@@ -499,9 +507,13 @@ function createMockPrisma() {
         let count = 0;
         for (const n of Array.from(store.paymentNodes.values())) {
           if (where?.projectId && n.projectId !== where.projectId) continue;
+          if (where?.userId && n.userId !== where.userId) continue;
           if (where?.status) {
             if (typeof where.status === 'object' && where.status.in && !where.status.in.includes(n.status)) continue;
+            else if (typeof where.status === 'string' && n.status !== where.status) continue;
           }
+          if (where?.dueDate?.lt && new Date(n.dueDate) >= new Date(where.dueDate.lt)) continue;
+          if (where?.id?.in && !where.id.in.includes(n.id)) continue;
           Object.assign(n, data);
           count++;
         }
@@ -515,6 +527,20 @@ function createMockPrisma() {
         }
         return count;
       }),
+      deleteMany: vi.fn(async ({ where }: any) => {
+        let count = 0;
+        for (const [id, n] of Array.from(store.paymentNodes.entries())) {
+          if (where?.projectId && n.projectId !== where.projectId) continue;
+          if (where?.status?.in && !where.status.in.includes(n.status)) continue;
+          store.paymentNodes.delete(id);
+          count++;
+        }
+        return { count };
+      }),
+    },
+
+    deliverable: {
+      updateMany: vi.fn(async () => ({ count: 0 })),
     },
 
     client: {
@@ -563,8 +589,26 @@ function createMockPrisma() {
       }),
     },
 
+    userSettings: {
+      // daily.check 在事件总线里读 reminderDays，测试场景下用默认值即可
+      findUnique: vi.fn(async () => null),
+    },
+
     businessMemory: {
       findMany: vi.fn(async () => []),
+    },
+
+    // ── AI 审计/缓存相关（语义分离 + token 落库需要） ──
+    aICallLog: {
+      create: vi.fn(async ({ data }: any) => ({ id: nextId(), ...data })),
+    },
+    aIAuditLog: {
+      create: vi.fn(async ({ data }: any) => ({ id: nextId(), ...data })),
+    },
+    aITemplateCache: {
+      findUnique: vi.fn(async () => null),
+      create: vi.fn(async ({ data }: any) => ({ id: nextId(), ...data })),
+      update: vi.fn(async ({ where, data }: any) => ({ id: where.intentHash, ...data })),
     },
   };
 }
@@ -614,11 +658,10 @@ describe('测试9：报价接受 → 全链路联动', () => {
     expect(projectCreateCall.status).toBe('in_progress');
     expect(projectCreateCall.totalAmount).toBe(15000);
 
-    // ✅ 自动创建了3个PaymentNode（30%/30%/40%）
-    expect(mockPrisma.paymentNode.create).toHaveBeenCalledTimes(3);
-    const amounts = mockPrisma.paymentNode.create.mock.calls.map(
-      (c: any) => c[0].data.amount
-    );
+    // ✅ 自动创建了3个PaymentNode（30%/30%/40%），通过单次 createMany 批量写入
+    expect(mockPrisma.paymentNode.createMany).toHaveBeenCalledTimes(1);
+    const createManyCall = mockPrisma.paymentNode.createMany.mock.calls[0][0];
+    const amounts = (createManyCall.data as any[]).map((d) => d.amount);
     expect(amounts).toEqual([4500, 4500, 6000]);
 
     // ✅ Quote的projectId已关联
@@ -659,30 +702,20 @@ describe('测试10：收款到账 → 自动记账', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('收款后自动创建收入记录+更新paidAmount', async () => {
+  it('收款后触发税务阈值检查（transaction/paidAmount 已在 paid/route.ts 事务中完成）', async () => {
     const { emit } = await import('@/lib/events');
 
+    // 注意：payment.received 事件本身只做税务预警，
+    // 收入记录和 paidAmount 累加发生在 paid/route.ts 事务里（防重复计入）
     await emit('payment.received', {
       paymentNodeId: 'node-001', userId: 'user-001', amount: 4500,
     });
 
-    // ✅ Transaction表自动新增一条收入记录
-    expect(mockPrisma.transaction.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          type: 'income',
-          amount: 4500,
-        }),
-      })
-    );
+    // ✅ 事件已触发 transaction.aggregate（getMonthlyIncome / getQuarterlyIncome 用来算税）
+    expect(mockPrisma.transaction.aggregate).toHaveBeenCalled();
 
-    // ✅ Project的paidAmount增加
-    expect(mockPrisma.project.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'project-001' },
-        data: { paidAmount: { increment: 4500 } },
-      })
-    );
+    // ✅ 事件本身不再写入 transaction 或改 paidAmount（防重复）
+    expect(mockPrisma.transaction.create).not.toHaveBeenCalled();
   });
 });
 
@@ -714,12 +747,15 @@ describe('测试11：逾期 → 催款升级', () => {
 
     await emit('daily.check', { userId: 'user-001' });
 
-    // ✅ PaymentNode的status变为overdue
-    expect(mockPrisma.paymentNode.update).toHaveBeenCalledWith(
+    // ✅ PaymentNode 的 status 变为 overdue（批量更新，避免 N+1）
+    expect(mockPrisma.paymentNode.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: 'overdue' }),
       })
     );
+    // 实际数据也确实被改成 overdue
+    const overdueNode = mockPrisma._store.paymentNodes.get('node-overdue');
+    expect(overdueNode?.status).toBe('overdue');
   });
 });
 
@@ -749,7 +785,7 @@ describe('测试12：项目状态变更 → 副作用执行', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('review → completed: 触发尾款+更新客户总收入', async () => {
+  it('review → completed: 触发尾款（totalRevenue 已在每次 paid/route.ts 中累加，本事件 no-op）', async () => {
     const { emit } = await import('@/lib/events');
 
     await emit('project.status_changed', {
@@ -760,13 +796,12 @@ describe('测试12：项目状态变更 → 副作用执行', () => {
     const nodeUpdateCalls = mockPrisma.paymentNode.update.mock.calls;
     expect(nodeUpdateCalls.length).toBeGreaterThan(0);
 
-    // ✅ Client的totalRevenue增加
-    expect(mockPrisma.client.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'client-001' },
-        data: { totalRevenue: { increment: 10000 } },
-      })
+    // ✅ updateClientTotalRevenue 现在是 no-op（防重复计入）
+    // totalRevenue 在每次 paid/route.ts 完成付款时累加，这里不再重复
+    const totalRevenueUpdates = mockPrisma.client.update.mock.calls.filter(
+      (c: any) => c[0]?.data?.totalRevenue
     );
+    expect(totalRevenueUpdates.length).toBe(0);
   });
 
   it('review → in_progress: revisionCount +1', async () => {
@@ -784,21 +819,20 @@ describe('测试12：项目状态变更 → 副作用执行', () => {
     );
   });
 
-  it('任意状态 → cancelled: 取消所有pending付款', async () => {
+  it('任意状态 → cancelled: 删除所有未支付节点（PaymentNode.status 不支持 cancelled，直接 deleteMany）', async () => {
     const { emit } = await import('@/lib/events');
 
     await emit('project.status_changed', {
       projectId: 'project-001', userId: 'user-001', from: 'in_progress', to: 'cancelled',
     });
 
-    // ✅ 所有pending的PaymentNode变为cancelled
-    expect(mockPrisma.paymentNode.updateMany).toHaveBeenCalledWith(
+    // ✅ 所有未支付的PaymentNode被删除
+    expect(mockPrisma.paymentNode.deleteMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           projectId: 'project-001',
-          status: { in: ['pending', 'reminded'] },
+          status: { in: ['pending', 'reminded', 'overdue'] },
         }),
-        data: { status: 'cancelled' },
       })
     );
   });
@@ -851,6 +885,10 @@ vi.mock('@/lib/ai', () => ({
   validateQuoteResponse: vi.fn(() => true),
   validateTransactionResponse: vi.fn(() => true),
   validateReminderResponse: vi.fn(() => true),
+  // ai-orchestrator 在审计日志里调用 getModelForTask 取模型名
+  getModelForTask: vi.fn(() => 'qwen3.5-plus'),
+  TASK_MODEL_MAP: {},
+  TASK_THINKING_BUDGET: {},
 }));
 
 vi.mock('@/lib/knowledge', () => ({
@@ -873,17 +911,20 @@ describe('测试14：记账智能分类 — 规则优先', () => {
     });
 
     expect(result.source).toBe('local_rules');
-    expect(result.category).toBe('cloud_infra');
+    expect(result.category).toBe('云服务');
     expect(callAI).not.toHaveBeenCalled();
   });
 
   it('"给客户买了瓶酒" → 调AI分类', async () => {
     const { callAI } = await import('@/lib/ai');
     (callAI as any).mockResolvedValueOnce({
-      category: 'business_entertainment',
-      subcategory: 'client_gift',
-      isDeductible: true,
-      confidence: 0.85,
+      data: {
+        category: 'business_entertainment',
+        subcategory: 'client_gift',
+        isDeductible: true,
+        confidence: 0.85,
+      },
+      usage: { prompt: 0, completion: 0, total: 0 },
     });
 
     const { smartClassifyTransaction } = await import('@/lib/ai-orchestrator');
@@ -896,8 +937,8 @@ describe('测试14：记账智能分类 — 规则优先', () => {
     expect(result.source).toBe('ai');
   });
 
-  it('金额¥999999 + meal分类 → amountSanityCheck warning', () => {
-    const check = TRANSACTION_INFERENCE_RULES.amountSanityCheck('meal', 999999);
+  it('金额¥999999 + 餐饮分类 → amountSanityCheck warning', () => {
+    const check = TRANSACTION_INFERENCE_RULES.amountSanityCheck('餐饮', 999999);
     expect(check.valid).toBe(false);
     expect(check.warning).toContain('超出常规范围');
   });
@@ -1006,7 +1047,7 @@ describe('测试16：AI失败降级', () => {
     // 即使AI挂了，本地规则仍可用
     const result = TRANSACTION_INFERENCE_RULES.tryLocalClassify('阿里云ECS续费');
     expect(result).not.toBeNull();
-    expect(result!.category).toBe('cloud_infra');
+    expect(result!.category).toBe('云服务');
   });
 });
 

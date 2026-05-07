@@ -1,41 +1,30 @@
 import { prisma } from '@/lib/prisma';
-import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
+import { withAuth } from '@/lib/with-auth';
 
 // GET /api/onboarding — 检查新用户状态
-export async function GET() {
-  try {
-    const userId = await requireUserId();
+export const GET = withAuth(async (userId) => {
+  const [clientCount, projectCount, quoteCount] = await Promise.all([
+    prisma.client.count({ where: { userId } }),
+    prisma.project.count({ where: { userId } }),
+    prisma.quote.count({ where: { userId } }),
+  ]);
 
-    const [clientCount, projectCount, quoteCount] = await Promise.all([
-      prisma.client.count({ where: { userId } }),
-      prisma.project.count({ where: { userId } }),
-      prisma.quote.count({ where: { userId } }),
-    ]);
+  const isNewUser = clientCount === 0 && projectCount === 0 && quoteCount === 0;
 
-    const isNewUser = clientCount === 0 && projectCount === 0 && quoteCount === 0;
-
-    return successResponse({
-      isNewUser,
-      progress: {
-        hasClients: clientCount > 0,
-        hasProjects: projectCount > 0,
-        hasQuotes: quoteCount > 0,
-      },
-    });
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Unauthorized') {
-      return errorResponse('请先登录', 401);
-    }
-    return errorResponse('获取引导状态失败', 500);
-  }
-}
+  return successResponse({
+    isNewUser,
+    progress: {
+      hasClients: clientCount > 0,
+      hasProjects: projectCount > 0,
+      hasQuotes: quoteCount > 0,
+    },
+  });
+}, '获取引导状态失败');
 
 // POST /api/onboarding — 一键导入演示数据
-export async function POST(req: Request) {
-  try {
-    const userId = await requireUserId();
-    const { action } = await req.json();
+export const POST = withAuth(async (userId, req: Request) => {
+  const { action } = await req.json();
 
     if (action === 'import_demo') {
       // 检查是否已有数据，防止重复导入
@@ -263,12 +252,5 @@ export async function POST(req: Request) {
       return successResponse({ message: '演示数据已清除' });
     }
 
-    return errorResponse('未知操作');
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Unauthorized') {
-      return errorResponse('请先登录', 401);
-    }
-    console.error('Onboarding error:', e);
-    return errorResponse('操作失败', 500);
-  }
-}
+  return errorResponse('未知操作');
+}, '操作失败');

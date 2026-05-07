@@ -4,7 +4,9 @@
 // ============================================================
 
 import * as crypto from 'crypto';
+import type { z } from 'zod';
 import { callAIWithFallback, getModelForTask } from './ai';
+import { isAIError } from './ai-errors';
 import { prisma } from './prisma';
 
 // ============================================================
@@ -364,7 +366,7 @@ export function hashInput(input: string): string {
  * 安全AI调用入口 — 替代直接调用 callAI()
  * 集成：输入清洗 → 速率检查 → API调用 → 输出验证 → 审计日志
  */
-export async function secureCallAI(params: {
+export async function secureCallAI<T = any>(params: {
   userId: string;
   task: string;
   rawInput: string;
@@ -372,14 +374,19 @@ export async function secureCallAI(params: {
   buildPromptFn: (sanitized: string) => string;
   temperature?: number;
   maxTokens?: number;
-}): Promise<{ success: boolean; data: any; error?: string }> {
+  /**
+   * 可选 Zod schema：传入后由 callAI 在 JSON.parse 后做结构校验，失败会自纠重试 1 次。
+   * orchestrator 各任务建议从 ai-schemas.ts 引入对应 schema 传进来。
+   */
+  schema?: z.ZodType<T>;
+}): Promise<{ success: boolean; data: T; error?: string; errorKind?: string }> {
   const startTime = Date.now();
-  const { userId, task, rawInput, systemPrompt, buildPromptFn } = params;
+  const { userId, task, rawInput, systemPrompt, buildPromptFn, schema } = params;
 
   // Step 1: 速率限制检查
   const rateLimit = AI_SECURITY_CONFIG.rateLimits[task] ?? 20;
   if (!aiRateLimiter.check(userId, rateLimit)) {
-    return { success: false, data: null, error: '请求过于频繁，请稍后再试' };
+    return { success: false, data: null as unknown as T, error: '请求过于频繁，请稍后再试' };
   }
 
   // Step 2: 输入清洗
@@ -404,7 +411,7 @@ export async function secureCallAI(params: {
       model: 'N/A',
       latencyMs: Date.now() - startTime,
     });
-    return { success: false, data: null, error: '输入内容包含不安全的内容，请修改后重试' };
+    return { success: false, data: null as unknown as T, error: '输入内容包含不安全的内容，请修改后重试' };
   }
 
   // Step 3: 构建安全的user prompt
@@ -415,22 +422,23 @@ export async function secureCallAI(params: {
     const timeout = AI_SECURITY_CONFIG.timeout[task] ?? AI_SECURITY_CONFIG.timeout.default;
 
     const result = await Promise.race([
-      callAIWithFallback({
+      callAIWithFallback<T>({
         task,
         systemPrompt,
         userPrompt,
         temperature: params.temperature,
         maxTokens: params.maxTokens,
+        schema,
       }),
-      new Promise((_, reject) =>
+      new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('AI_TIMEOUT')), timeout)
       ),
     ]);
 
-    // Step 5: 输出验证
-    const validation = validateAIOutput(result, task);
+    // Step 5: 输出验证（从新 { data, usage } 结构中取出 data）
+    const validation = validateAIOutput(result.data, task);
 
-    // Step 6: 审计日志
+    // Step 6: 审计日志（带 token 用量）
     await logAIAudit({
       timestamp: new Date().toISOString(),
       userId,
@@ -443,15 +451,21 @@ export async function secureCallAI(params: {
       outputIssues: validation.issues,
       model: getModelForTask(task),
       latencyMs: Date.now() - startTime,
+      tokenUsage: result.usage,
     });
 
     if (!validation.valid) {
-      return { success: false, data: null, error: 'AI输出未通过安全验证，请重试' };
+      return { success: false, data: null as unknown as T, error: 'AI输出未通过安全验证，请重试' };
     }
 
-    return { success: true, data: validation.sanitizedOutput };
+    return { success: true, data: validation.sanitizedOutput as T };
 
   } catch (error: any) {
+    // 区分 AIError 的细分错误（schema/parse/timeout/auth/...）写进审计，便于事后复盘
+    const errorKind = isAIError(error)
+      ? error.kind
+      : (error.message === 'AI_TIMEOUT' ? 'timeout' : 'api_error');
+
     await logAIAudit({
       timestamp: new Date().toISOString(),
       userId,
@@ -461,15 +475,23 @@ export async function secureCallAI(params: {
       threats: sanitizeResult.threats.map(t => `${t.severity}:${t.name}`),
       sensitiveRedacted: [],
       outputValid: false,
-      outputIssues: [error.message === 'AI_TIMEOUT' ? 'timeout' : 'api_error'],
+      outputIssues: [errorKind],
       model: getModelForTask(task),
       latencyMs: Date.now() - startTime,
     });
 
+    // 用户层错误信息按 kind 给出可读文案，但不暴露 schema 细节
+    let userMessage = 'AI服务异常，请稍后重试';
+    if (errorKind === 'timeout') userMessage = 'AI响应超时，请重试';
+    else if (errorKind === 'rate-limit') userMessage = 'AI调用过于频繁，请稍后再试';
+    else if (errorKind === 'auth') userMessage = 'AI服务未正确配置';
+    else if (errorKind === 'schema' || errorKind === 'parse') userMessage = 'AI返回结果格式异常，请重试';
+
     return {
       success: false,
-      data: null,
-      error: error.message === 'AI_TIMEOUT' ? 'AI响应超时，请重试' : 'AI服务异常，请稍后重试',
+      data: null as unknown as T,
+      error: userMessage,
+      errorKind,
     };
   }
 }

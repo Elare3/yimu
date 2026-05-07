@@ -55,7 +55,20 @@
       "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/login\" -UseBasicParsing -TimeoutSec 30; \"HTTP $\\($r.StatusCode\\) - $\\($r.Content.Length\\) bytes\" } catch { \"ERROR: $_\" })",
       "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3001/api/onboarding\" -UseBasicParsing -TimeoutSec 30; \"HTTP $\\($r.StatusCode\\) - $\\($r.Content\\)\" } catch { $sc = $_.Exception.Response.StatusCode.value__; \"HTTP $sc - $_\" })",
       "Bash(bash -n D:/yimu/scripts/deploy.sh)",
-      "Bash(bash -n D:/yimu/scripts/pg-bootstrap.sh)"
+      "Bash(bash -n D:/yimu/scripts/pg-bootstrap.sh)",
+      "Bash(find /d/yimu/src -name \"*.tsx\" -exec grep -l \"type.*Modal\\\\|Modal.*open\" {} \\\\;)",
+      "Bash(xargs wc *)",
+      "Bash(find /d/yimu/src/app/api -type f -name \"route.ts\" -exec grep -l \"if \\(e instanceof Error && e.message === 'Unauthorized'\\)\" {} \\\\;)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(find /d/yimu/src/app/api -type f -name \"route.ts\" -exec grep -L \"withAuth\" {} \\\\;)",
+      "Bash(find /d/yimu/src -name \"*.tsx\" -exec grep -l \"flex\\\\|grid\\\\|md:\\\\|lg:\\\\|responsive\" {} \\\\;)",
+      "Bash(find /d/yimu/src/app -name \"layout.tsx\" -exec grep -l \"ErrorBoundary\" {} \\\\;)",
+      "Bash(echo \"---EXIT=$?---\")",
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(find src *)",
+      "Bash(find src/hooks -name \"*.ts\" -exec basename {} \\\\;)",
+      "Bash(find src/components -name \"*.tsx\" -exec grep -l \"formatDate\\\\|formatAmount\" {} \\\\;)",
+      "Bash(tee tsc-output.txt)"
     ]
   }
 }

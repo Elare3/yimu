@@ -13,15 +13,30 @@ import {
   calculateDueDate,
   guessCategory,
 } from './rules';
+import { sendMail } from './mailer';
+import {
+  renderOverdueEmail,
+  renderDueSoonEmail,
+  renderQuoteExpiringEmail,
+} from './email-templates';
+import {
+  beijingMidnight,
+  daysUntilBeijing,
+  beijingMonthRange,
+  beijingQuarterStart,
+  beijingYMD,
+} from './utils';
 
 // ═══ 事件类型定义 ═══
 
 type EventPayload = {
   'quote.accepted': { quoteId: string; userId: string };
   'quote.rejected': { quoteId: string; userId: string; reason?: string };
+  'quote.expiring': { quoteId: string; userId: string; daysUntilExpire: number };
   'project.status_changed': { projectId: string; userId: string; from: string; to: string };
   'project.created': { projectId: string; userId: string };
   'payment.overdue': { paymentNodeId: string; userId: string; overdueDays: number };
+  'payment.due_soon': { paymentNodeId: string; userId: string; daysUntilDue: number };
   'payment.received': { paymentNodeId: string; userId: string; amount: number };
   'payment.reminder_sent': { paymentNodeId: string; level: number };
   'transaction.created': { transactionId: string; userId: string; type: string; amount: number };
@@ -66,32 +81,31 @@ on('quote.accepted', async ({ quoteId, userId }) => {
 
   // 如果已经关联项目，推进状态并创建收款节点
   if (quote.projectId) {
-    const existingProject = await prisma.project.findUnique({ where: { id: quote.projectId } });
+    const projectId = quote.projectId; // 提到 const，避免 .map 闭包丢失 narrowing
+    const existingProject = await prisma.project.findUnique({ where: { id: projectId } });
     if (existingProject && existingProject.status === 'quoted') {
       await prisma.project.update({
-        where: { id: quote.projectId },
+        where: { id: projectId },
         data: { status: 'in_progress', totalAmount: quote.total, startDate: existingProject.startDate || new Date() },
       });
 
-      // 检查是否已有收款节点，没有则自动创建
-      const existingNodes = await prisma.paymentNode.count({ where: { projectId: quote.projectId } });
+      // 检查是否已有收款节点，没有则自动创建（一次 createMany 替代 N 次 create）
+      const existingNodes = await prisma.paymentNode.count({ where: { projectId } });
       if (existingNodes === 0 && quote.total > 0) {
         const rule = PAYMENT_SPLIT_RULES.getPlan(quote.total);
         const splits = PAYMENT_SPLIT_RULES.creditAdjustment('normal', rule.splits);
         const startDate = existingProject.startDate || new Date();
-        for (const split of splits) {
-          await prisma.paymentNode.create({
-            data: {
-              userId,
-              projectId: quote.projectId,
-              clientId: quote.clientId,
-              name: split.label,
-              amount: Math.round(quote.total * split.percent / 100),
-              dueDate: calculateDueDate(split.trigger, startDate),
-              status: 'pending',
-            },
-          });
-        }
+        await prisma.paymentNode.createMany({
+          data: splits.map((split) => ({
+            userId,
+            projectId,
+            clientId: quote.clientId,
+            name: split.label,
+            amount: Math.round((quote.total * split.percent) / 100),
+            dueDate: calculateDueDate(split.trigger, startDate),
+            status: 'pending',
+          })),
+        });
       }
     }
     return;
@@ -113,23 +127,21 @@ on('quote.accepted', async ({ quoteId, userId }) => {
   // 关联报价单到项目
   await prisma.quote.update({ where: { id: quoteId }, data: { projectId: project.id } });
 
-  // 自动拆分收款节点
+  // 自动拆分收款节点（一次 createMany 替代 N 次 create）
   const rule = PAYMENT_SPLIT_RULES.getPlan(quote.total);
   const splits = PAYMENT_SPLIT_RULES.creditAdjustment('normal', rule.splits);
 
-  for (const split of splits) {
-    await prisma.paymentNode.create({
-      data: {
-        userId,
-        projectId: project.id,
-        clientId: quote.clientId,
-        name: split.label,
-        amount: Math.round(quote.total * split.percent / 100),
-        dueDate: calculateDueDate(split.trigger, project.startDate),
-        status: 'pending',
-      },
-    });
-  }
+  await prisma.paymentNode.createMany({
+    data: splits.map((split) => ({
+      userId,
+      projectId: project.id,
+      clientId: quote.clientId,
+      name: split.label,
+      amount: Math.round((quote.total * split.percent) / 100),
+      dueDate: calculateDueDate(split.trigger, project.startDate),
+      status: 'pending',
+    })),
+  });
 
   // 更新客户项目数
   await prisma.client.update({
@@ -152,9 +164,14 @@ on('project.status_changed', async ({ projectId, userId, from, to }) => {
             orderBy: { dueDate: 'desc' },
           });
           if (lastNode) {
+            // dueDate 设为"北京今天 23:59:59.999"。原版用 setHours 走服务器本地 TZ，
+            // UTC 服务器上会变成"北京明天 07:59"，跨日提前到期不准。
+            // 用 beijingMidnight(明天) - 1ms 精确表达"北京今天的最后一刻"。
+            const tomorrowBjMidnight = new Date(beijingMidnight().getTime() + 86_400_000);
+            const todayBjEnd = new Date(tomorrowBjMidnight.getTime() - 1);
             await prisma.paymentNode.update({
               where: { id: lastNode.id },
-              data: { dueDate: new Date(new Date().setHours(23, 59, 59, 999)) },
+              data: { dueDate: todayBjEnd },
             });
           }
           break;
@@ -201,23 +218,21 @@ on('project.status_changed', async ({ projectId, userId, from, to }) => {
         case 'createPaymentNodes': {
           const proj = await prisma.project.findUnique({ where: { id: projectId } });
           if (proj && proj.totalAmount > 0) {
-            // 检查是否已有收款节点
+            // 检查是否已有收款节点（一次 createMany 替代 N 次 create）
             const existingNodes = await prisma.paymentNode.count({ where: { projectId } });
             if (existingNodes === 0) {
               const rule = PAYMENT_SPLIT_RULES.getPlan(proj.totalAmount);
-              for (const split of rule.splits) {
-                await prisma.paymentNode.create({
-                  data: {
-                    userId,
-                    projectId,
-                    clientId: proj.clientId,
-                    name: split.label,
-                    amount: Math.round(proj.totalAmount * split.percent / 100),
-                    dueDate: calculateDueDate(split.trigger, proj.startDate),
-                    status: 'pending',
-                  },
-                });
-              }
+              await prisma.paymentNode.createMany({
+                data: rule.splits.map((split) => ({
+                  userId,
+                  projectId,
+                  clientId: proj.clientId,
+                  name: split.label,
+                  amount: Math.round((proj.totalAmount * split.percent) / 100),
+                  dueDate: calculateDueDate(split.trigger, proj.startDate),
+                  status: 'pending',
+                })),
+              });
             }
           }
           break;
@@ -267,34 +282,91 @@ on('project.created', async ({ userId }) => {
 });
 
 
-// ── 每日检查 → 逾期自动标记 + 催款升级 ──
+// ── 每日检查 → 逾期自动标记 + 即将到期提醒 + 报价快过期提醒 ──
+// 时间基准：北京时间（产品仅服务大陆用户）。所有"今天 00:00"由 beijingMidnight 显式计算，
+// 不依赖服务器本地时区，避免部署到 UTC 服务器时窗口偏移一天。
 on('daily.check', async ({ userId }) => {
-  const today = new Date();
+  const today = beijingMidnight(); // 北京时间今天 00:00 的绝对时间
 
+  // 1) 已逾期：dueDate < 北京今天 00:00 且 status 仍是 pending/reminded
+  // 优化：一次 updateMany 批量改状态，再遍历事件总线（事件总线在内存里，不会有 N 次 DB 往返）
   const overdueNodes = await prisma.paymentNode.findMany({
     where: { userId, status: { in: ['pending', 'reminded'] }, dueDate: { lt: today } },
+    select: { id: true, dueDate: true }, // 只取需要的字段，省带宽
   });
 
-  for (const node of overdueNodes) {
-    await prisma.paymentNode.update({
-      where: { id: node.id },
+  if (overdueNodes.length > 0) {
+    await prisma.paymentNode.updateMany({
+      where: { id: { in: overdueNodes.map((n) => n.id) } },
       data: { status: 'overdue' },
     });
 
-    const overdueDays = Math.floor((today.getTime() - node.dueDate.getTime()) / 86400000);
+    for (const node of overdueNodes) {
+      // 用 daysUntilBeijing 反算逾期天数（更精确，不会因毫秒进位错位）
+      const overdueDays = -daysUntilBeijing(node.dueDate);
+      await emit('payment.overdue', {
+        paymentNodeId: node.id,
+        userId,
+        overdueDays: Math.max(0, overdueDays),
+      });
+    }
+  }
 
-    await emit('payment.overdue', {
-      paymentNodeId: node.id,
+  // 2) 即将到期：根据用户 paymentReminderDays 提前 N 天提醒（默认 [3, 1, 0]）
+  const settings = await prisma.userSettings.findUnique({ where: { userId } });
+  const reminderDays = settings?.paymentReminderDays ?? [3, 1, 0];
+
+  for (const advance of reminderDays) {
+    // 北京时间窗口：[今天 + advance 天 00:00, +1 天 00:00)
+    const targetStart = new Date(today.getTime() + advance * 86_400_000);
+    const targetEnd = new Date(targetStart.getTime() + 86_400_000);
+
+    const dueSoonNodes = await prisma.paymentNode.findMany({
+      where: {
+        userId,
+        status: { in: ['pending', 'reminded'] },
+        dueDate: { gte: targetStart, lt: targetEnd },
+      },
+    });
+
+    for (const node of dueSoonNodes) {
+      await emit('payment.due_soon', {
+        paymentNodeId: node.id,
+        userId,
+        daysUntilDue: advance,
+      });
+    }
+  }
+
+  // 3) 报价快过期：validUntil 在北京时间今天起 0–3 天内
+  const expireWindowEnd = new Date(today.getTime() + 4 * 86_400_000); // 含今天后 3 天
+
+  const expiringQuotes = await prisma.quote.findMany({
+    where: {
       userId,
-      overdueDays,
+      status: 'sent',
+      validUntil: { gte: today, lt: expireWindowEnd },
+    },
+  });
+
+  for (const q of expiringQuotes) {
+    if (!q.validUntil) continue;
+    const days = Math.max(0, daysUntilBeijing(q.validUntil));
+    await emit('quote.expiring', {
+      quoteId: q.id,
+      userId,
+      daysUntilExpire: days,
     });
   }
 });
 
 
-// ── 逾期 → 自动确定催款级别 ──
-on('payment.overdue', async ({ paymentNodeId, overdueDays }) => {
-  const node = await prisma.paymentNode.findUnique({ where: { id: paymentNodeId } });
+// ── 逾期 → 自动确定催款级别 + 发邮件 ──
+on('payment.overdue', async ({ paymentNodeId, userId, overdueDays }) => {
+  const node = await prisma.paymentNode.findUnique({
+    where: { id: paymentNodeId },
+    include: { project: true, client: true },
+  });
   if (!node) return;
 
   const targetLevel = REMINDER_ESCALATION_RULES.getLevel(overdueDays, node.reminderCount);
@@ -307,29 +379,136 @@ on('payment.overdue', async ({ paymentNodeId, overdueDays }) => {
     const interest = REMINDER_ESCALATION_RULES.calculateOverdueInterest(node.amount, overdueDays);
     console.log(`[OVERDUE_INTEREST] Payment ${paymentNodeId}: ¥${interest.interest}`);
   }
+
+  // 发邮件给用户（不是给客户）— 提醒用户去催款
+  await sendOverdueEmail(userId, node, overdueDays);
 });
+
+
+// ── 即将到期 → 发提醒邮件 ──
+on('payment.due_soon', async ({ paymentNodeId, userId, daysUntilDue }) => {
+  const node = await prisma.paymentNode.findUnique({
+    where: { id: paymentNodeId },
+    include: { project: true, client: true },
+  });
+  if (!node) return;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, emailVerified: true, notifyDueSoon: true },
+  });
+  if (!user || !user.email || !user.emailVerified || !user.notifyDueSoon) return;
+
+  const tpl = renderDueSoonEmail({
+    userName: user.name || '',
+    clientName: node.client?.name || '客户',
+    projectName: node.project?.name || '项目',
+    nodeName: node.name,
+    amount: node.amount,
+    dueDate: node.dueDate,
+    daysUntilDue,
+  });
+
+  await sendMail({
+    to: user.email,
+    subject: tpl.subject,
+    html: tpl.html,
+    userId,
+    eventType: 'payment.due_soon',
+  });
+});
+
+
+// ── 报价快过期 → 发提醒邮件 ──
+on('quote.expiring', async ({ quoteId, userId, daysUntilExpire }) => {
+  const quote = await prisma.quote.findUnique({
+    where: { id: quoteId },
+    include: { client: true },
+  });
+  if (!quote || !quote.validUntil) return;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, emailVerified: true, notifyQuoteExpiring: true },
+  });
+  if (!user || !user.email || !user.emailVerified || !user.notifyQuoteExpiring) return;
+
+  const tpl = renderQuoteExpiringEmail({
+    userName: user.name || '',
+    clientName: quote.client?.name || '客户',
+    quoteTitle: quote.title || '报价单',
+    total: quote.total,
+    validUntil: quote.validUntil,
+    daysUntilExpire,
+  });
+
+  await sendMail({
+    to: user.email,
+    subject: tpl.subject,
+    html: tpl.html,
+    userId,
+    eventType: 'quote.expiring',
+  });
+});
+
+
+// ── 内部工具：发逾期邮件（带通知偏好检查） ──
+async function sendOverdueEmail(
+  userId: string,
+  node: { name: string; amount: number; dueDate: Date; project: { name: string } | null; client: { name: string } | null },
+  overdueDays: number,
+) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, emailVerified: true, notifyOverdue: true },
+  });
+  if (!user || !user.email || !user.emailVerified || !user.notifyOverdue) return;
+
+  const tpl = renderOverdueEmail({
+    userName: user.name || '',
+    clientName: node.client?.name || '客户',
+    projectName: node.project?.name || '项目',
+    nodeName: node.name,
+    amount: node.amount,
+    dueDate: node.dueDate,
+    overdueDays,
+  });
+
+  await sendMail({
+    to: user.email,
+    subject: tpl.subject,
+    html: tpl.html,
+    userId,
+    eventType: 'payment.overdue',
+  });
+}
 
 
 // ═══ 工具函数 ═══
 
-async function getMonthlyIncome(userId: string): Promise<number> {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+// 收入聚合（北京时间窗口）。原版分两个函数，DRY 后合并为一个 helper。
+// 边界严格按北京月/季切，跨服务器 TZ 一致。
+async function sumIncomeInRange(userId: string, start: Date, end: Date): Promise<number> {
   const result = await prisma.transaction.aggregate({
-    where: { userId, type: 'income', date: { gte: monthStart, lt: monthEnd } },
+    where: { userId, type: 'income', date: { gte: start, lt: end } },
     _sum: { amount: true },
   });
   return result._sum.amount || 0;
 }
 
-async function getQuarterlyIncome(userId: string): Promise<number> {
-  const now = new Date();
-  const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-  const quarterEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 1);
-  const result = await prisma.transaction.aggregate({
-    where: { userId, type: 'income', date: { gte: quarterStart, lt: quarterEnd } },
-    _sum: { amount: true },
-  });
-  return result._sum.amount || 0;
+async function getMonthlyIncome(userId: string, now: Date = new Date()): Promise<number> {
+  const { year, month } = beijingYMD(now);
+  const { start, end } = beijingMonthRange(year, month);
+  return sumIncomeInRange(userId, start, end);
+}
+
+async function getQuarterlyIncome(userId: string, now: Date = new Date()): Promise<number> {
+  const start = beijingQuarterStart(now);
+  // 季末 = 季首 + 3 个北京自然月。借 beijingMonthRange 处理跨年。
+  const { year, month } = beijingYMD(start); // start 已是北京季首
+  const q = Math.floor((month - 1) / 3); // 0..3
+  const endMonthYear = q === 3 ? year + 1 : year;
+  const endMonth = q === 3 ? 1 : (q + 1) * 3 + 1;
+  const { start: end } = beijingMonthRange(endMonthYear, endMonth);
+  return sumIncomeInRange(userId, start, end);
 }

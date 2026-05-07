@@ -18,7 +18,7 @@
 | 表单 | React Hook Form + Zod |
 | 图表 | Recharts |
 | 拖拽 | @dnd-kit（看板视图） |
-| PDF | @react-pdf/renderer + html2pdf.js（报价 / 催款函导出） |
+| PDF | @react-pdf/renderer + html2canvas + jsPDF（报价 / 催款函导出） |
 | 测试 | Vitest |
 
 ## 核心功能

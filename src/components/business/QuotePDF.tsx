@@ -1,6 +1,7 @@
 'use client';
 
 import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
+import { formatAmount, formatDate as fmtDate } from '@/lib/utils';
 
 // 注册中文字体 — 使用阿里 CDN（国内可达）
 const FONT_BASE = 'https://registry.npmmirror.com/@fontsource/noto-sans-sc/files';
@@ -198,14 +199,13 @@ const styles = StyleSheet.create({
   },
 });
 
+// 包一层 null 防护：utils.formatDate 不接受 null/undefined，模板里 validUntil 等字段可能为空
 function formatDate(d: string | Date | null | undefined): string {
   if (!d) return '-';
-  return new Date(d).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmtDate(d);
 }
 
-function formatMoney(n: number): string {
-  return `¥${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+const formatMoney = formatAmount;
 
 export interface QuotePDFData {
   quoteNumber: string;

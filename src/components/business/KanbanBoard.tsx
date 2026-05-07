@@ -20,7 +20,10 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
 import ProjectCard from './ProjectCard';
-import { STATUS_LABELS, STATUS_TRANSITIONS } from '@/lib/utils';
+import {
+  PROJECT_STATUS_LABELS as STATUS_LABELS,
+  PROJECT_STATUS_TRANSITIONS as STATUS_TRANSITIONS,
+} from '@/lib/constants';
 import { Modal } from '@/components/ui/Modal';
 
 interface ProjectItem {

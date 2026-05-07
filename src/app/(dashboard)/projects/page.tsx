@@ -11,6 +11,7 @@ import KanbanBoard from '@/components/business/KanbanBoard';
 import ProjectForm from '@/components/business/ProjectForm';
 import { toast } from '@/stores/toastStore';
 import { formatAmount, formatDate } from '@/lib/utils';
+import { ACTIVE_PROJECT_STATUSES } from '@/lib/constants';
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -43,7 +44,7 @@ export default function ProjectsPage() {
   // 搜索结果总数（用于空态提示）
   const searchHitCount = useMemo(() => {
     if (!searchText.trim()) return 0;
-    return (['quoted', 'in_progress', 'review'] as const).reduce(
+    return ACTIVE_PROJECT_STATUSES.reduce(
       (sum, status) => sum + ((filteredColumns[status] as unknown[] | undefined)?.length || 0),
       0
     );

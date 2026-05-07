@@ -6,6 +6,7 @@
 
 import * as crypto from 'crypto';
 import { REMINDER_ESCALATION_RULES } from './rules';
+import { PROMPT_VERSION } from './prompts';
 
 // ═══ 通用参数转换函数 ═══
 
@@ -82,6 +83,14 @@ export function deadlineTier(daysUntilDeadline?: number): string {
   if (daysUntilDeadline > 14) return 'normal';
   if (daysUntilDeadline > 7) return 'tight';
   return 'rush';
+}
+
+/** 报价接受率分层（用于历史信号意图） */
+export function tierAcceptRate(rate: number): string {
+  if (rate >= 0.7) return 'high';      // 报价很受欢迎
+  if (rate >= 0.4) return 'mid';       // 半数成交
+  if (rate >= 0.2) return 'low';       // 多被拒
+  return 'very_low';                    // 几乎不成交，说明定价/方向有问题
 }
 
 // ═══ 各任务的意图构建函数 ═══
@@ -193,8 +202,16 @@ export function extractKeywords(text: string): string[] {
 
 // ═══ 意图哈希（用于缓存命中） ═══
 
+/**
+ * 把意图参数 + 当前 PROMPT_VERSION 混合后 md5，截 12 位作为模板缓存 key。
+ *
+ * 把 PROMPT_VERSION 烤进哈希里 ——  prompts.ts 的 system foundation 一旦升级（PROMPT_VERSION ++），
+ * 整批旧缓存自动 miss 重新生成，不用写迁移脚本删 AITemplateCache 表。
+ */
 export function hashIntent(intent: Record<string, unknown>): string {
   const { task, ...params } = intent;
-  const normalized = JSON.stringify(params, Object.keys(params).sort());
+  // 注入版本号；下游 task 列里也带版本，避免不同 task 共享同一个 hash
+  const versionedParams = { ...params, __pv: PROMPT_VERSION };
+  const normalized = JSON.stringify(versionedParams, Object.keys(versionedParams).sort());
   return `${task}_${crypto.createHash('md5').update(normalized).digest('hex').slice(0, 12)}`;
 }

@@ -8,7 +8,8 @@ import { Loading } from '@/components/ui/Loading';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import ClientForm from '@/components/business/ClientForm';
-import { formatAmount, formatDate, STATUS_LABELS } from '@/lib/utils';
+import { formatAmount, formatDate, isOverdueDate } from '@/lib/utils';
+import { PROJECT_STATUS_LABELS as STATUS_LABELS } from '@/lib/constants';
 import { toast } from '@/stores/toastStore';
 
 type Tab = 'overview' | 'projects' | 'quotes' | 'finance';
@@ -228,7 +229,8 @@ function OverviewTab({ client, router }: { client: Record<string, unknown>; rout
           ) : (
             <div className="space-y-1">
               {pendingPayments.map((p) => {
-                const isOverdue = new Date(p.dueDate) < new Date();
+                // 截止当天 24:00 之前都不算逾期（北京时间）
+                const isOverdue = isOverdueDate(p.dueDate);
                 return (
                   <div key={p.id} className="flex items-center justify-between px-3 py-2.5 rounded-[10px] bg-cream-50/50">
                     <div className="min-w-0 flex-1">
@@ -400,7 +402,8 @@ function FinanceTab({ transactions, paymentNodes, stats, router }: {
         <SectionCard title="收款节点" count={paymentNodes.length}>
           <div className="space-y-1">
             {paymentNodes.map((p) => {
-              const isOverdue = p.status !== 'paid' && new Date(p.dueDate) < new Date();
+              // 截止当天 24:00 之前都不算逾期（北京时间）
+              const isOverdue = p.status !== 'paid' && isOverdueDate(p.dueDate);
               const isPaid = p.status === 'paid';
               return (
                 <div

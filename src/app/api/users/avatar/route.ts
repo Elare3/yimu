@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma';
-import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
+import { withAuth } from '@/lib/with-auth';
 
 // 删除旧头像文件：仅限 /uploads/avatars/ 下文件，容错失败
 async function removeOldAvatar(avatarUrl: string | null | undefined) {
@@ -44,82 +44,63 @@ function detectImageKind(buf: Buffer): 'jpg' | 'png' | 'webp' | 'gif' | null {
 }
 
 // POST /api/users/avatar — 上传头像
-export async function POST(req: Request) {
-  try {
-    const userId = await requireUserId();
+export const POST = withAuth(async (userId, req: Request) => {
+  const formData = await req.formData();
+  const file = formData.get('avatar') as File | null;
 
-    const formData = await req.formData();
-    const file = formData.get('avatar') as File | null;
-
-    if (!file) return errorResponse('请选择图片文件');
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return errorResponse('仅支持 JPG/PNG/WebP/GIF 格式');
-    }
-    if (file.size > MAX_SIZE) {
-      return errorResponse('图片大小不能超过 2MB');
-    }
-
-    // 读入完整内容后按 magic bytes 真实嗅探，忽略客户端 Content-Type
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const realKind = detectImageKind(buffer);
-    if (!realKind) {
-      return errorResponse('文件内容不是合法的图片');
-    }
-
-    // 生成安全文件名：userId + timestamp + ext（不使用用户提供的文件名）
-    const filename = `${userId}_${Date.now()}.${realKind}`;
-
-    // 确保目录存在
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
-    await mkdir(uploadDir, { recursive: true });
-
-    // 写入文件
-    const filepath = path.join(uploadDir, filename);
-    await writeFile(filepath, buffer);
-
-    // 读旧头像，写完新头像后再删除，避免数据库失败时孤立文件
-    const prev = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
-
-    // 更新数据库
-    const avatarUrl = `/uploads/avatars/${filename}`;
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: { avatarUrl },
-      select: { id: true, avatarUrl: true },
-    });
-
-    await removeOldAvatar(prev?.avatarUrl);
-
-    return successResponse(user);
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Unauthorized') {
-      return errorResponse('请先登录', 401);
-    }
-    console.error('上传头像失败:', e);
-    return errorResponse('上传头像失败', 500);
+  if (!file) return errorResponse('请选择图片文件');
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return errorResponse('仅支持 JPG/PNG/WebP/GIF 格式');
   }
-}
+  if (file.size > MAX_SIZE) {
+    return errorResponse('图片大小不能超过 2MB');
+  }
+
+  // 读入完整内容后按 magic bytes 真实嗅探，忽略客户端 Content-Type
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const realKind = detectImageKind(buffer);
+  if (!realKind) {
+    return errorResponse('文件内容不是合法的图片');
+  }
+
+  // 生成安全文件名：userId + timestamp + ext（不使用用户提供的文件名）
+  const filename = `${userId}_${Date.now()}.${realKind}`;
+
+  // 确保目录存在
+  const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
+  await mkdir(uploadDir, { recursive: true });
+
+  // 写入文件
+  const filepath = path.join(uploadDir, filename);
+  await writeFile(filepath, buffer);
+
+  // 读旧头像，写完新头像后再删除，避免数据库失败时孤立文件
+  const prev = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
+
+  // 更新数据库
+  const avatarUrl = `/uploads/avatars/${filename}`;
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { avatarUrl },
+    select: { id: true, avatarUrl: true },
+  });
+
+  await removeOldAvatar(prev?.avatarUrl);
+
+  return successResponse(user);
+}, '上传头像失败');
 
 // DELETE /api/users/avatar — 删除头像（恢复默认）
-export async function DELETE() {
-  try {
-    const userId = await requireUserId();
+export const DELETE = withAuth(async (userId) => {
+  const prev = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
 
-    const prev = await prisma.user.findUnique({ where: { id: userId }, select: { avatarUrl: true } });
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { avatarUrl: '' },
+    select: { id: true, avatarUrl: true },
+  });
 
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: { avatarUrl: '' },
-      select: { id: true, avatarUrl: true },
-    });
+  await removeOldAvatar(prev?.avatarUrl);
 
-    await removeOldAvatar(prev?.avatarUrl);
-
-    return successResponse(user);
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Unauthorized') {
-      return errorResponse('请先登录', 401);
-    }
-    return errorResponse('删除头像失败', 500);
-  }
-}
+  return successResponse(user);
+}, '删除头像失败');

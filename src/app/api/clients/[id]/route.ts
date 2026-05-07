@@ -1,34 +1,26 @@
 import { prisma } from '@/lib/prisma';
-import { requireUserId } from '@/lib/session';
 import { successResponse, errorResponse } from '@/lib/utils';
+import { withAuth } from '@/lib/with-auth';
 
 // GET /api/clients/[id] - 客户详情（含统计）
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  try {
-    const userId = await requireUserId();
-    const [client, stats] = await Promise.all([
-      prisma.client.findFirst({
-        where: { id: params.id, userId },
-        include: {
-          projects: { orderBy: { updatedAt: 'desc' }, take: 10 },
-          quotes: { orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, title: true, total: true, status: true, createdAt: true } },
-          transactions: { orderBy: { date: 'desc' }, take: 10, select: { id: true, description: true, amount: true, type: true, date: true, category: true } },
-          paymentNodes: { orderBy: { dueDate: 'asc' }, take: 10, include: { project: { select: { id: true, name: true } } } },
-          _count: { select: { projects: true, transactions: true, quotes: true, paymentNodes: true } },
-        },
-      }),
-      getClientStats(params.id, userId),
-    ]);
+export const GET = withAuth(async (userId, _req: Request, { params }: { params: { id: string } }) => {
+  const [client, stats] = await Promise.all([
+    prisma.client.findFirst({
+      where: { id: params.id, userId },
+      include: {
+        projects: { orderBy: { updatedAt: 'desc' }, take: 10 },
+        quotes: { orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, title: true, total: true, status: true, createdAt: true } },
+        transactions: { orderBy: { date: 'desc' }, take: 10, select: { id: true, description: true, amount: true, type: true, date: true, category: true } },
+        paymentNodes: { orderBy: { dueDate: 'asc' }, take: 10, include: { project: { select: { id: true, name: true } } } },
+        _count: { select: { projects: true, transactions: true, quotes: true, paymentNodes: true } },
+      },
+    }),
+    getClientStats(params.id, userId),
+  ]);
 
-    if (!client) return errorResponse('客户不存在', 404);
-    return successResponse({ ...client, stats });
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Unauthorized') {
-      return errorResponse('请先登录', 401);
-    }
-    return errorResponse('获取客户详情失败', 500);
-  }
-}
+  if (!client) return errorResponse('客户不存在', 404);
+  return successResponse({ ...client, stats });
+}, '获取客户详情失败');
 
 async function getClientStats(clientId: string, userId: string) {
   const [
@@ -99,63 +91,47 @@ async function getClientStats(clientId: string, userId: string) {
 }
 
 // PUT /api/clients/[id] - 更新客户
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  try {
-    const userId = await requireUserId();
-    const body = await req.json();
+export const PUT = withAuth(async (userId, req: Request, { params }: { params: { id: string } }) => {
+  const body = await req.json();
 
-    // 确认所有权
-    const existing = await prisma.client.findFirst({ where: { id: params.id, userId } });
-    if (!existing) return errorResponse('客户不存在', 404);
+  // 确认所有权
+  const existing = await prisma.client.findFirst({ where: { id: params.id, userId } });
+  if (!existing) return errorResponse('客户不存在', 404);
 
-    const finalPhone = (body.phone ?? (existing.phone || '')).trim();
-    const finalEmail = (body.email ?? (existing.email || '')).trim();
-    if (!finalPhone && !finalEmail) {
-      return errorResponse('电话和邮箱至少填写一项');
-    }
-
-    const client = await prisma.client.update({
-      where: { id: params.id },
-      data: {
-        name: body.name ?? existing.name,
-        contactPerson: body.contactPerson ?? existing.contactPerson,
-        phone: body.phone ?? existing.phone,
-        email: body.email ?? existing.email,
-        wechat: body.wechat ?? existing.wechat,
-        address: body.address ?? existing.address,
-        tags: body.tags ?? existing.tags,
-        notes: body.notes ?? existing.notes,
-        source: body.source ?? existing.source,
-        status: body.status ?? existing.status,
-      },
-    });
-
-    return successResponse(client);
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Unauthorized') {
-      return errorResponse('请先登录', 401);
-    }
-    return errorResponse('更新客户失败', 500);
+  const finalPhone = (body.phone ?? (existing.phone || '')).trim();
+  const finalEmail = (body.email ?? (existing.email || '')).trim();
+  if (!finalPhone && !finalEmail) {
+    return errorResponse('电话和邮箱至少填写一项');
   }
-}
+
+  const client = await prisma.client.update({
+    where: { id: params.id },
+    data: {
+      name: body.name ?? existing.name,
+      contactPerson: body.contactPerson ?? existing.contactPerson,
+      phone: body.phone ?? existing.phone,
+      email: body.email ?? existing.email,
+      wechat: body.wechat ?? existing.wechat,
+      address: body.address ?? existing.address,
+      tags: body.tags ?? existing.tags,
+      notes: body.notes ?? existing.notes,
+      source: body.source ?? existing.source,
+      status: body.status ?? existing.status,
+    },
+  });
+
+  return successResponse(client);
+}, '更新客户失败');
 
 // DELETE /api/clients/[id] - 软删除
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  try {
-    const userId = await requireUserId();
-    const existing = await prisma.client.findFirst({ where: { id: params.id, userId } });
-    if (!existing) return errorResponse('客户不存在', 404);
+export const DELETE = withAuth(async (userId, _req: Request, { params }: { params: { id: string } }) => {
+  const existing = await prisma.client.findFirst({ where: { id: params.id, userId } });
+  if (!existing) return errorResponse('客户不存在', 404);
 
-    await prisma.client.update({
-      where: { id: params.id },
-      data: { status: 'archived' },
-    });
+  await prisma.client.update({
+    where: { id: params.id },
+    data: { status: 'archived' },
+  });
 
-    return successResponse({ message: '客户已归档' });
-  } catch (e) {
-    if (e instanceof Error && e.message === 'Unauthorized') {
-      return errorResponse('请先登录', 401);
-    }
-    return errorResponse('删除客户失败', 500);
-  }
-}
+  return successResponse({ message: '客户已归档' });
+}, '删除客户失败');

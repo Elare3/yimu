@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { StatusBadge } from '@/components/ui/Badge';
 import { formatAmount, formatDate } from '@/lib/utils';
 import { toast } from '@/stores/toastStore';
+import { consumeNdjsonStream } from '@/lib/ai-stream';
 
 // ── Summary Cards ──
 interface SummaryCardProps {
@@ -278,6 +279,8 @@ export function AIInsightWidget() {
   const [aiLoading, setAiLoading] = useState(false);
   const [rulesLoading, setRulesLoading] = useState(true);
   const [data, setData] = useState<InsightData | null>(null);
+  // 流式阶段提示——后端 NDJSON 推过来的 progress.message
+  const [phaseMessage, setPhaseMessage] = useState<string>('');
 
   // 页面加载时自动获取规则洞察（即时，无云端调用）
   useEffect(() => {
@@ -298,21 +301,30 @@ export function AIInsightWidget() {
     return () => { cancelled = true; };
   }, []);
 
-  // AI深度分析
+  // AI深度分析（NDJSON 流式：边收 progress 阶段事件边刷 UI，最后吃 result 落数据）
   const generateAIInsight = useCallback(async () => {
     setAiLoading(true);
+    setPhaseMessage('小木启动中...');
+    let gotResult = false;
     try {
       const res = await fetch('/api/dashboard/ai-insight', { method: 'POST' });
-      const result = await res.json();
-      if (result.success) {
-        setData(result.data);
-      } else {
-        toast.error(result.error || '小木洞察生成失败');
+      await consumeNdjsonStream(res, {
+        onProgress: (e) => setPhaseMessage(e.message),
+        onResult: (result) => {
+          gotResult = true;
+          setData(result as InsightData);
+        },
+        onError: (e) => toast.error(e.error || '小木洞察生成失败'),
+      });
+      // 流正常结束但没拿到 result（比如服务端中途异常吞掉了）
+      if (!gotResult) {
+        toast.error('小木洞察生成失败，请稍后重试');
       }
     } catch {
       toast.error('网络错误，请稍后重试');
     } finally {
       setAiLoading(false);
+      setPhaseMessage('');
     }
   }, []);
 
@@ -344,7 +356,7 @@ export function AIInsightWidget() {
               <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeLinecap="round" />
               </svg>
-              小木分析中...
+              {phaseMessage || '小木分析中...'}
             </>
           ) : data?.mode === 'full' ? '重新分析' : '小木深度分析'}
         </button>
@@ -362,13 +374,13 @@ export function AIInsightWidget() {
         </div>
       )}
 
-      {/* AI加载覆盖层 */}
+      {/* AI加载覆盖层——直接展示流式阶段提示，避免「卡住的 spinner」错觉 */}
       {aiLoading && data && (
         <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-[10px] bg-caramel-bg/50 text-sm text-caramel">
           <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeLinecap="round" />
           </svg>
-          AI 正在深度分析，预计 10-20 秒...
+          {phaseMessage || 'AI 正在深度分析，预计 10-20 秒...'}
         </div>
       )}
 

@@ -38,9 +38,10 @@ function saveReadIds(ids: Set<string>) {
 }
 
 export function useNotifications() {
+  // 不覆盖全局 SWRConfig 的 revalidateOnFocus（关闭）；refreshInterval 已经够用，
+  // 切 tab 都重拉会浪费流量、还把 owner 白名单接口打高。
   const { data, error, isLoading, mutate } = useSWR('/api/notifications', {
     refreshInterval: 60_000,
-    revalidateOnFocus: true,
     dedupingInterval: 10_000,
   });
 

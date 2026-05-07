@@ -69,6 +69,11 @@ interface UserProfile {
   plan: string;
   privacyMode: string;
   hasPassword: boolean;
+  email: string | null;
+  emailVerified: boolean;
+  notifyOverdue: boolean;
+  notifyDueSoon: boolean;
+  notifyQuoteExpiring: boolean;
   settings: {
     currency: string;
     taxRate: number;
@@ -91,7 +96,47 @@ interface AILogStats {
   intentOnlyCount: number;
   noneCount: number;
   days: number;
+  byTask?: Record<string, number>;
 }
+
+interface AISecurityStats {
+  auditCount: number;
+  threatBlockedCount: number;
+  sensitiveRedactedCount: number;
+  outputInvalidCount: number;
+  topThreats: { type: string; count: number }[];
+  topSensitive: { type: string; count: number }[];
+}
+
+interface AICostStats {
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalTokens: number;
+  avgLatencyMs: number;
+}
+
+const TASK_GROUP_LABELS: Record<string, string> = {
+  quote: '报价生成',
+  reminder: '催款文案',
+  insight: '经营洞察',
+  transaction: '记账解析',
+  contract: '合同生成',
+};
+
+const SENSITIVE_TYPE_LABELS: Record<string, string> = {
+  phone: '手机号',
+  email: '邮箱',
+  id_card: '身份证号',
+  bank_card: '银行卡号',
+  amount: '具体金额',
+};
+
+const THREAT_TYPE_LABELS: Record<string, string> = {
+  role_hijack: '角色劫持',
+  prompt_injection: '提示词注入',
+  jailbreak: '越狱企图',
+  data_exfil: '数据外泄',
+};
 
 // ── 主组件 ──
 
@@ -125,6 +170,8 @@ export default function SettingsPage() {
   const { data: aiLogsData, mutate: mutateAiLogs } = useSWR('/api/users/ai-logs?days=7');
   const aiLogs: AILogEntry[] = aiLogsData?.data?.logs || [];
   const aiStats: AILogStats | null = aiLogsData?.data?.stats || null;
+  const aiSecurity: AISecurityStats | null = aiLogsData?.data?.security || null;
+  const aiCost: AICostStats | null = aiLogsData?.data?.cost || null;
   const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
 
   // 账号删除
@@ -161,6 +208,14 @@ export default function SettingsPage() {
   const [defaultTerms, setDefaultTerms] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(false);
 
+  // 邮箱 & 通知偏好
+  const [emailInput, setEmailInput] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [notifyOverdue, setNotifyOverdue] = useState(true);
+  const [notifyDueSoon, setNotifyDueSoon] = useState(true);
+  const [notifyQuoteExpiring, setNotifyQuoteExpiring] = useState(true);
+
   // 回填
   useEffect(() => {
     if (profile) {
@@ -168,6 +223,10 @@ export default function SettingsPage() {
       setCompanyName(profile.companyName || '');
       setBusinessType(profile.businessType || 'other');
       setPrivacyMode(profile.privacyMode || 'standard');
+      setEmailInput(profile.email || '');
+      setNotifyOverdue(profile.notifyOverdue ?? true);
+      setNotifyDueSoon(profile.notifyDueSoon ?? true);
+      setNotifyQuoteExpiring(profile.notifyQuoteExpiring ?? true);
       if (profile.settings) {
         setCurrency(profile.settings.currency || 'CNY');
         setTaxRate(String(profile.settings.taxRate || ''));
@@ -176,6 +235,21 @@ export default function SettingsPage() {
       }
     }
   }, [profile]);
+
+  // 邮箱验证回调（?verified=1 / ?verifyError=xxx）
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('verified') === '1') {
+      toast.success('邮箱已验证，今后会通过这个邮箱发送通知');
+      mutate();
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (params.get('verifyError')) {
+      const err = params.get('verifyError');
+      toast.error(err === 'invalid' ? '验证链接已失效，请重新发送' : '邮箱已变更，请重新验证');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [mutate]);
 
   // ── handlers ──
 
@@ -334,6 +408,79 @@ export default function SettingsPage() {
       }
     } catch { toast.error('网络错误'); }
     finally { setFeedbackLoading(false); }
+  };
+
+  // 保存邮箱
+  const handleEmailSave = async () => {
+    const trimmed = emailInput.trim().toLowerCase();
+    if (trimmed && !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(trimmed)) {
+      toast.error('邮箱格式不正确');
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      const res = await fetch('/api/users/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const r = await res.json();
+      if (r.success) {
+        toast.success(trimmed ? '邮箱已保存，请前往邮箱完成验证' : '邮箱已清除');
+        mutate();
+      } else {
+        toast.error(r.error || '保存失败');
+      }
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  // 发送验证邮件
+  const handleSendVerify = async () => {
+    setVerifyLoading(true);
+    try {
+      const res = await fetch('/api/users/notifications/send-verify', { method: 'POST' });
+      const r = await res.json();
+      if (r.success) toast.success('验证邮件已发送，24 小时内有效');
+      else toast.error(r.error || '发送失败');
+    } catch {
+      toast.error('网络错误');
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  // 切换通知开关（即时保存）
+  const handleNotifyToggle = async (
+    field: 'notifyOverdue' | 'notifyDueSoon' | 'notifyQuoteExpiring',
+    value: boolean,
+  ) => {
+    // 乐观更新
+    if (field === 'notifyOverdue') setNotifyOverdue(value);
+    if (field === 'notifyDueSoon') setNotifyDueSoon(value);
+    if (field === 'notifyQuoteExpiring') setNotifyQuoteExpiring(value);
+    try {
+      const res = await fetch('/api/users/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      });
+      const r = await res.json();
+      if (!r.success) {
+        toast.error(r.error || '保存失败');
+        // 回滚
+        if (field === 'notifyOverdue') setNotifyOverdue(!value);
+        if (field === 'notifyDueSoon') setNotifyDueSoon(!value);
+        if (field === 'notifyQuoteExpiring') setNotifyQuoteExpiring(!value);
+      } else {
+        mutate();
+      }
+    } catch {
+      toast.error('网络错误');
+    }
   };
 
   const maskedPhone = profile?.phone ? `${profile.phone.slice(0, 3)}****${profile.phone.slice(7)}` : '';
@@ -594,6 +741,80 @@ export default function SettingsPage() {
                   )}
                 </div>
               </Section>
+
+              {/* 邮箱通知 */}
+              <Section title="邮箱通知" desc="到期、逾期、报价快过期时给你发提醒">
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <Input
+                      label="通知邮箱"
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      placeholder="your@email.com"
+                      hint={
+                        profile?.email && profile.emailVerified
+                          ? `已验证：${profile.email}`
+                          : profile?.email
+                            ? `未验证（请前往邮箱点击验证链接）`
+                            : '填写邮箱才能收到通知'
+                      }
+                    />
+                  </div>
+                  <Button
+                    onClick={handleEmailSave}
+                    loading={emailLoading}
+                    size="sm"
+                    disabled={emailInput === (profile?.email || '')}
+                  >
+                    保存
+                  </Button>
+                </div>
+
+                {profile?.email && !profile.emailVerified && (
+                  <div className="p-3 rounded-[12px] bg-amber-50/60 border border-amber-100 flex items-start gap-2">
+                    <svg className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="flex-1">
+                      <p className="text-xs text-amber-700">
+                        邮箱未验证，通知不会发送。点击下方按钮发送验证邮件。
+                      </p>
+                      <Button size="sm" variant="ghost" onClick={handleSendVerify} loading={verifyLoading}>
+                        发送验证邮件
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 通知类型开关 */}
+                <div className="space-y-1">
+                  <NotifyRow
+                    title="收款逾期提醒"
+                    desc="收款节点过了应收日还没到账时通知"
+                    checked={notifyOverdue}
+                    onChange={(v) => handleNotifyToggle('notifyOverdue', v)}
+                    disabled={!profile?.emailVerified}
+                  />
+                  <NotifyRow
+                    title="收款即将到期"
+                    desc={`提前 ${profile?.settings?.paymentReminderDays?.join('、') || '3、1、0'} 天提醒`}
+                    checked={notifyDueSoon}
+                    onChange={(v) => handleNotifyToggle('notifyDueSoon', v)}
+                    disabled={!profile?.emailVerified}
+                  />
+                  <NotifyRow
+                    title="报价单快过期"
+                    desc="报价单有效期前 3 天内提醒跟进"
+                    checked={notifyQuoteExpiring}
+                    onChange={(v) => handleNotifyToggle('notifyQuoteExpiring', v)}
+                    disabled={!profile?.emailVerified}
+                  />
+                </div>
+                {!profile?.emailVerified && (
+                  <p className="text-[11px] text-brown-300">完成邮箱验证后才能开关具体通知类型</p>
+                )}
+              </Section>
             </>
           )}
 
@@ -718,6 +939,95 @@ export default function SettingsPage() {
                   />
                 </div>
               </Section>
+
+              {/* 数据透明面板：安全防御 */}
+              {aiSecurity && aiSecurity.auditCount > 0 && (
+                <Section title="数据透明面板" desc="近7天小木在你身后做了哪些保护">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <TransparencyCard
+                      label="AI 调用总数"
+                      value={aiSecurity.auditCount}
+                      hint="每次 AI 通信都被记录"
+                    />
+                    <TransparencyCard
+                      label="敏感数据脱敏"
+                      value={aiSecurity.sensitiveRedactedCount}
+                      hint="手机号/身份证等已自动屏蔽"
+                      color={aiSecurity.sensitiveRedactedCount > 0 ? 'green' : 'gray'}
+                    />
+                    <TransparencyCard
+                      label="威胁拦截"
+                      value={aiSecurity.threatBlockedCount}
+                      hint="提示词注入/角色劫持等"
+                      color={aiSecurity.threatBlockedCount > 0 ? 'amber' : 'gray'}
+                    />
+                    <TransparencyCard
+                      label="输出验证失败"
+                      value={aiSecurity.outputInvalidCount}
+                      hint="AI 回复未通过规则校验被拦截"
+                      color={aiSecurity.outputInvalidCount > 0 ? 'amber' : 'gray'}
+                    />
+                  </div>
+
+                  {(aiSecurity.topSensitive.length > 0 || aiSecurity.topThreats.length > 0) && (
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {aiSecurity.topSensitive.length > 0 && (
+                        <div className="p-3 rounded-[12px] bg-green-50/60 border border-green-100">
+                          <p className="text-[11px] text-green-700 mb-1.5 font-medium">已脱敏的敏感类型</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {aiSecurity.topSensitive.map(s => (
+                              <span key={s.type} className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-green-200 text-green-700">
+                                {SENSITIVE_TYPE_LABELS[s.type] ?? s.type} × {s.count}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {aiSecurity.topThreats.length > 0 && (
+                        <div className="p-3 rounded-[12px] bg-amber-50/60 border border-amber-100">
+                          <p className="text-[11px] text-amber-700 mb-1.5 font-medium">已拦截的威胁类型</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {aiSecurity.topThreats.map(t => (
+                              <span key={t.type} className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-amber-200 text-amber-700">
+                                {THREAT_TYPE_LABELS[t.type] ?? t.type} × {t.count}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {aiCost && aiCost.totalTokens > 0 && (
+                    <div className="mt-3 p-3 rounded-[12px] bg-cream-50/60 border border-cream-200">
+                      <p className="text-[11px] text-brown-500 mb-1.5 font-medium">调用成本（仅你的数据）</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-brown-700">
+                        <span><span className="text-brown-400">总 token：</span><span className="tabular-nums font-medium">{aiCost.totalTokens.toLocaleString()}</span></span>
+                        <span><span className="text-brown-400">输入：</span><span className="tabular-nums">{aiCost.totalPromptTokens.toLocaleString()}</span></span>
+                        <span><span className="text-brown-400">输出：</span><span className="tabular-nums">{aiCost.totalCompletionTokens.toLocaleString()}</span></span>
+                        {aiCost.avgLatencyMs > 0 && (
+                          <span><span className="text-brown-400">平均响应：</span><span className="tabular-nums">{(aiCost.avgLatencyMs / 1000).toFixed(1)}s</span></span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiStats?.byTask && Object.keys(aiStats.byTask).length > 0 && (
+                    <div className="mt-3 p-3 rounded-[12px] bg-cream-50/60 border border-cream-200">
+                      <p className="text-[11px] text-brown-500 mb-1.5 font-medium">按功能分布</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(aiStats.byTask)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([task, count]) => (
+                            <span key={task} className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-cream-300 text-brown-700">
+                              {TASK_GROUP_LABELS[task] ?? task} × {count}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </Section>
+              )}
 
               {/* 小木调用记录 */}
               <Section title="小木调用记录" desc="查看最近7天的小木数据处理详情">
@@ -922,4 +1232,62 @@ function MicroBadge({ color, children }: { color: 'gray' | 'green' | 'amber'; ch
     amber: 'bg-amber-50 text-amber-600',
   };
   return <span className={`text-[10px] px-1.5 py-0.5 rounded-md leading-none ${styles[color]}`}>{children}</span>;
+}
+
+function NotifyRow({
+  title, desc, checked, onChange, disabled,
+}: {
+  title: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between py-2.5 ${disabled ? 'opacity-60' : ''}`}>
+      <div className="min-w-0 flex-1 pr-3">
+        <p className="text-sm font-medium text-brown-800">{title}</p>
+        <p className="text-xs text-brown-400 mt-0.5">{desc}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`relative shrink-0 w-10 h-6 rounded-full transition-colors ${
+          checked ? 'bg-caramel' : 'bg-cream-300'
+        } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${
+            checked ? 'translate-x-4' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function TransparencyCard({
+  label, value, hint, color = 'gray',
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  color?: 'gray' | 'green' | 'amber';
+}) {
+  const styles = {
+    gray:  { bg: 'bg-cream-50/60', border: 'border-cream-200', num: 'text-brown-700', lbl: 'text-brown-500', hint: 'text-brown-400' },
+    green: { bg: 'bg-green-50/60', border: 'border-green-100', num: 'text-green-700', lbl: 'text-green-700', hint: 'text-green-600/80' },
+    amber: { bg: 'bg-amber-50/60', border: 'border-amber-100', num: 'text-amber-700', lbl: 'text-amber-700', hint: 'text-amber-600/80' },
+  };
+  const s = styles[color];
+  return (
+    <div className={`p-3 rounded-[12px] ${s.bg} border ${s.border}`}>
+      <div className={`text-2xl font-bold tabular-nums ${s.num} leading-tight`}>{value}</div>
+      <div className={`text-[11px] font-medium mt-0.5 ${s.lbl}`}>{label}</div>
+      <div className={`text-[10px] mt-1 ${s.hint} leading-snug`}>{hint}</div>
+    </div>
+  );
 }

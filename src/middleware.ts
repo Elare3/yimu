@@ -2,15 +2,30 @@ import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
 
 // ── 简单内存速率限制器 ──
-// 业务 API：每用户每分钟 60 次
-// 登录/注册：每 IP 每 10 分钟 10 次（防验证码/密码爆破）
+//
+// 注意：基于内存的限流仅适用于单实例部署。多副本/横向扩容时各进程独立计数，
+// 等于实际倍数放大限额。生产横扩前需要换 Redis/Upstash。
+//
+// 桶设计（多桶分摊不同成本，先短桶后长桶，命中即拒绝）：
+//   • API 通用：每用户 60/min
+//   • 登录回调：每 IP 10/10min（防爆破）
+//   • 数据导出：每用户 3/hour（高敏感）
+//   • AI 路由：每用户 20/min + 200/day（云端 AI 调用单次 ~10-30s 且按量计费）
+//   • 验证码发送：每用户 3/min + 10/day（防短信/邮件轰炸）
 const RATE_LIMIT_WINDOW = 60_000;
 const RATE_LIMIT_MAX = 60;
 const LOGIN_WINDOW = 10 * 60_000;
 const LOGIN_MAX = 10;
-// 数据导出：每用户每小时 3 次
 const EXPORT_WINDOW = 60 * 60_000;
 const EXPORT_MAX = 3;
+const AI_MIN_WINDOW = 60_000;
+const AI_MIN_MAX = 20;
+const AI_DAY_WINDOW = 24 * 60 * 60_000;
+const AI_DAY_MAX = 200;
+const VERIFY_MIN_WINDOW = 60_000;
+const VERIFY_MIN_MAX = 3;
+const VERIFY_DAY_WINDOW = 24 * 60 * 60_000;
+const VERIFY_DAY_MAX = 10;
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 function checkLimit(key: string, windowMs: number, max: number): boolean {
@@ -44,6 +59,17 @@ function clientIp(req: Request): string {
   const xff = req.headers.get('x-forwarded-for');
   if (xff) return xff.split(',')[0].trim();
   return req.headers.get('x-real-ip') || 'unknown';
+}
+
+// 命中任意一个 AI 路由就走专用限流桶（这些调用慢且按量计费）
+// 路径片段以 `/ai-` 开头是项目约定（ai-generate / ai-insight / ai-classify / ai-parse / ai-adjust）
+function isAIRoute(pathname: string): boolean {
+  return /\/api\/.+\/ai-[a-z]+(\/|$)/.test(pathname) || pathname.startsWith('/api/dashboard/ai-');
+}
+
+// 验证码/邮件发送类路径（防止用我们的服务器轰炸目标邮箱/短信）
+function isVerifySendRoute(pathname: string): boolean {
+  return pathname === '/api/users/notifications/send-verify';
 }
 
 /**
@@ -120,7 +146,43 @@ export default withAuth(
       }
     }
 
-    // ── API速率限制：每用户每分钟60次 ──
+    // ── AI 路由限流：每用户 20/min + 200/day（双桶，先短后长） ──
+    // AI 单次调用慢且按量付费，必须比通用 60/min 桶更紧。两个桶同时计数：
+    // 短桶防瞬时刷接口卡住前端，长桶防整天慢慢刷。
+    if (isAIRoute(pathname)) {
+      const uid = (token?.id as string) || clientIp(req);
+      if (!checkLimit(`ai-min:${uid}`, AI_MIN_WINDOW, AI_MIN_MAX)) {
+        return new NextResponse(
+          JSON.stringify({ success: false, error: 'AI 请求过于频繁，请稍后再试' }),
+          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } }
+        );
+      }
+      if (!checkLimit(`ai-day:${uid}`, AI_DAY_WINDOW, AI_DAY_MAX)) {
+        return new NextResponse(
+          JSON.stringify({ success: false, error: '今日 AI 调用次数已达上限，明天再来' }),
+          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '86400' } }
+        );
+      }
+    }
+
+    // ── 验证码发送限流：每用户 3/min + 10/day（防邮件/短信轰炸他人邮箱） ──
+    if (isVerifySendRoute(pathname)) {
+      const uid = (token?.id as string) || clientIp(req);
+      if (!checkLimit(`verify-min:${uid}`, VERIFY_MIN_WINDOW, VERIFY_MIN_MAX)) {
+        return new NextResponse(
+          JSON.stringify({ success: false, error: '请稍候再试，验证码发送过于频繁' }),
+          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } }
+        );
+      }
+      if (!checkLimit(`verify-day:${uid}`, VERIFY_DAY_WINDOW, VERIFY_DAY_MAX)) {
+        return new NextResponse(
+          JSON.stringify({ success: false, error: '今日验证码发送次数已达上限' }),
+          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '86400' } }
+        );
+      }
+    }
+
+    // ── API速率限制：每用户每分钟60次（通用兜底，前面专用桶都未命中时检查） ──
     if (pathname.startsWith('/api/')) {
       const userId = (token?.id as string) || clientIp(req);
       if (!checkRateLimit(userId)) {
@@ -166,6 +228,12 @@ export const config = {
     '/api/users/:path*',
     '/api/export',
     '/api/export/:path*',
+    '/api/feedback',
+    '/api/onboarding',
+    '/api/pricing-feedback',
+    '/api/business-memory',
+    '/api/activities',
+    '/api/contracts/:path*',
     '/api/auth/callback/:path*',
     '/api/auth/persist-session',
   ],

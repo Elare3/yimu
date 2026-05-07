@@ -1,7 +1,11 @@
 // ============================================================
-// 一木 YiMu — AI 统一调用接口 v2.2
-// 支持：任务路由 / 快速思考(thinking_budget) / JSON解析 / 重试降级 / 超时控制
+// 一木 YiMu — AI 统一调用接口 v2.3
+// 支持：任务路由 / 快速思考(thinking_budget) / JSON解析 / Zod schema 校验
+//      / 重试降级 / 超时控制 / AIError 分类
 // ============================================================
+
+import type { z } from 'zod';
+import { AIError, classifyHttpError, wrapUnknown, isAIError } from './ai-errors';
 
 // 主/轻模型从环境变量读取，未配置时兜底到 qwen3.5-plus
 const PRIMARY_MODEL = process.env.PRIMARY_MODEL || 'qwen3.5-plus';
@@ -43,8 +47,10 @@ export const TASK_THINKING_BUDGET: Record<string, number> = {
   'fallback':              256,   // 降级时快速响应
 };
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // 统一调用选项接口
-export interface AICallOptions {
+export interface AICallOptions<T = any> {
   task: string;
   systemPrompt: string;
   userPrompt: string;
@@ -53,37 +59,57 @@ export interface AICallOptions {
   jsonMode?: boolean;         // 默认 true
   timeoutMs?: number;         // 默认 60000 (60秒)
   thinkingBudget?: number;    // 思考token预算，undefined=使用任务默认值
+  /**
+   * 可选 Zod schema：jsonMode 下提供时会在 JSON.parse 后做结构校验。
+   * 校验失败会抛 AIError(kind:'schema')，由 callAI 内部完成 1 次带提示的自纠重试。
+   */
+  schema?: z.ZodType<T>;
 }
 
+// AI 调用返回值 — 携带 token 用量供审计日志写入
+export interface AITokenUsage {
+  prompt: number;
+  completion: number;
+  total: number;
+}
+
+export interface AICallResult<T = any> {
+  data: T;
+  usage: AITokenUsage;
+}
+
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// 重试时追加的提示后缀 — 给模型一个明确的"为什么被打回"的信号
+const RETRY_SUFFIX_PARSE = '\n\n⚠️ 上次输出不是合法 JSON，请严格返回单一 JSON 对象，不要包含 markdown 代码块、解释文字或多余前后缀。';
+const RETRY_SUFFIX_SCHEMA = (issues: string) =>
+  `\n\n⚠️ 上次输出未通过结构校验，问题：${issues}。请严格按照 system 中要求的字段名和类型返回 JSON。`;
+
 /**
- * 统一 AI 调用接口
- * 通过 DashScope 兼容模式调用通义千问（qwen3.5-plus 推理模型）
- *
- * 思考模式说明：
- * - enable_thinking: true  + thinking_budget 限制思考深度
- * - 各任务自动匹配最优思考预算（TASK_THINKING_BUDGET）
- * - 复杂任务（洞察/合同）分配更多思考预算以提升质量
- * - 简单任务（解析/分类）分配较少思考预算以保证速度
+ * 单次裸 HTTP 调用 + JSON/Schema 校验。
+ * 失败时抛 AIError，由外层 callAI 决定是否做自纠重试。
  */
-export async function callAI(options: AICallOptions) {
+async function callAIOnce<T = unknown>(
+  options: AICallOptions<T>,
+  promptOverride?: string,
+): Promise<AICallResult<T>> {
   const {
     task,
     systemPrompt,
-    userPrompt,
     temperature = 0.7,
     maxTokens = 2000,
     jsonMode = true,
     timeoutMs = 60000,
     thinkingBudget,
+    schema,
   } = options;
+  const userPrompt = promptOverride ?? options.userPrompt;
 
   if (!process.env.DASHSCOPE_API_KEY) {
-    throw new Error('DASHSCOPE_API_KEY 环境变量未配置');
+    throw new AIError('auth', 'DASHSCOPE_API_KEY 环境变量未配置', { retryable: false });
   }
 
   const model = getModelForTask(task);
-
-  // 思考预算：优先使用调用方指定的，否则使用任务默认值
   const budget = thinkingBudget ?? TASK_THINKING_BUDGET[task] ?? 256;
   const enableThinking = budget > 0;
 
@@ -91,8 +117,9 @@ export async function callAI(options: AICallOptions) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  let response: Response;
   try {
-    const response = await fetch(
+    response = await fetch(
       'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
       {
         method: 'POST',
@@ -108,73 +135,148 @@ export async function callAI(options: AICallOptions) {
           ],
           temperature,
           max_tokens: maxTokens,
-          // 推理思考配置
           enable_thinking: enableThinking,
           ...(enableThinking && { thinking_budget: budget }),
           ...(jsonMode && { response_format: { type: 'json_object' } }),
         }),
         signal: controller.signal,
-      }
+      },
     );
+  } catch (error: unknown) {
+    clearTimeout(timeoutId);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new AIError('timeout', `AI request timeout after ${timeoutMs / 1000}s`, { cause: error });
+    }
+    throw wrapUnknown(error);
+  }
 
+  try {
     if (!response.ok) {
-      // 解析错误详情
-      let errorDetail = '';
+      let detail = '';
       try {
         const errBody = await response.json();
-        errorDetail = errBody?.error?.message || errBody?.message || JSON.stringify(errBody);
+        detail = errBody?.error?.message || errBody?.message || JSON.stringify(errBody);
       } catch {
-        errorDetail = await response.text().catch(() => '');
+        detail = await response.text().catch(() => '');
       }
-      throw new Error(`AI API error: ${response.status} — ${errorDetail}`);
+      throw classifyHttpError(response.status, detail);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const content: string | undefined = data.choices?.[0]?.message?.content;
 
     if (!content) {
-      throw new Error('AI returned empty response');
+      throw new AIError('empty', 'AI returned empty response');
     }
 
-    if (jsonMode) {
-      try {
-        return JSON.parse(content);
-      } catch {
-        // 尝试提取最外层JSON块（贪婪匹配最后一个 }）
-        const match = content.match(/\{[\s\S]*\}/);
-        if (match) {
-          try {
-            return JSON.parse(match[0]);
-          } catch {
-            throw new Error(`AI response contains invalid JSON: ${match[0].slice(0, 100)}...`);
-          }
+    const usage: AITokenUsage = {
+      prompt: data.usage?.prompt_tokens ?? 0,
+      completion: data.usage?.completion_tokens ?? 0,
+      total: data.usage?.total_tokens ?? 0,
+    };
+
+    if (!jsonMode) {
+      return { data: content as unknown as T, usage };
+    }
+
+    // ── JSON parse ──
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      // 兜底：抓最外层 {...} 块再试一次（DashScope 偶尔包 markdown）
+      const match = content.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch {
+          throw new AIError('parse', `AI response is not valid JSON: ${content.slice(0, 200)}`, {
+            raw: content,
+          });
         }
-        throw new Error('AI response is not valid JSON');
+      } else {
+        throw new AIError('parse', `AI response has no JSON object: ${content.slice(0, 200)}`, {
+          raw: content,
+        });
       }
     }
 
-    return content;
-  } catch (error: unknown) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error(`AI request timeout after ${timeoutMs / 1000}s`);
+    // ── Zod 校验（可选） ──
+    if (schema) {
+      const result = schema.safeParse(parsed);
+      if (!result.success) {
+        const issues = result.error.issues
+          .slice(0, 5)
+          .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
+          .join('; ');
+        throw new AIError('schema', `AI output failed schema: ${issues}`, {
+          raw: typeof content === 'string' ? content.slice(0, 500) : undefined,
+        });
+      }
+      return { data: result.data, usage };
     }
-    throw error;
+
+    return { data: parsed as T, usage };
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
 /**
- * 带降级的 AI 调用
- * 主模型失败后关闭思考 + 降温重试
+ * 统一 AI 调用接口
+ *
+ * - JSON parse 失败 / schema 校验失败 → 自动追加纠错提示，重试 1 次
+ * - 其他错误（超时/HTTP/限流/auth）不在此处重试，由 callAIWithFallback 决定
+ *
+ * 思考模式说明：
+ * - enable_thinking: true  + thinking_budget 限制思考深度
+ * - 各任务自动匹配最优思考预算（TASK_THINKING_BUDGET）
  */
-export async function callAIWithFallback(options: AICallOptions) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function callAI<T = any>(options: AICallOptions<T>): Promise<AICallResult<T>> {
   try {
-    return await callAI(options);
+    return await callAIOnce<T>(options);
+  } catch (err) {
+    if (!isAIError(err)) throw wrapUnknown(err);
+
+    // 仅 parse / schema 错误做"带提示的"自纠重试 1 次
+    if (err.kind === 'parse' || err.kind === 'schema') {
+      const suffix =
+        err.kind === 'parse'
+          ? RETRY_SUFFIX_PARSE
+          : RETRY_SUFFIX_SCHEMA(err.message.replace(/^AI output failed schema:\s*/, ''));
+      try {
+        return await callAIOnce<T>(options, options.userPrompt + suffix);
+      } catch (retryErr) {
+        // 二次失败：保留原始 kind 抛出（不要降级为 unknown）
+        if (isAIError(retryErr)) throw retryErr;
+        throw wrapUnknown(retryErr);
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * 带降级的 AI 调用
+ * 主模型失败 + 错误可重试时，关闭思考 + 降温重试
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function callAIWithFallback<T = any>(options: AICallOptions<T>): Promise<AICallResult<T>> {
+  try {
+    return await callAI<T>(options);
   } catch (error) {
-    console.warn(`Primary AI call failed for task [${options.task}], retrying with fallback config:`, error);
+    const aiErr = isAIError(error) ? error : wrapUnknown(error);
+
+    // 不可重试的错误（auth / rate-limit / 4xx）直接抛出，避免无意义重试浪费成本
+    if (!aiErr.retryable) {
+      console.warn(`[AI] non-retryable error for task [${options.task}]: ${aiErr.kind} — ${aiErr.message}`);
+      throw aiErr;
+    }
+
+    console.warn(`[AI] primary failed for task [${options.task}] (${aiErr.kind}), retrying with fallback config:`, aiErr.message);
     // 降级策略：关闭思考 + 降低温度 + 延长超时
-    return await callAI({
+    return await callAI<T>({
       ...options,
       task: 'fallback',
       temperature: 0.3,
@@ -186,7 +288,7 @@ export async function callAIWithFallback(options: AICallOptions) {
 
 
 // ============================================================
-// 响应验证函数
+// 响应验证函数（保留：旧路径仍在用，逐步替换为 ai-schemas.ts 的 Zod schema）
 // ============================================================
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

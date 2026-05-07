@@ -1,20 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import { formatAmount, formatDate as fmtDate } from '@/lib/utils';
 import type { QuotePDFData } from './QuotePDF';
 
 interface Props {
   data: QuotePDFData;
 }
 
+// 包一层 null 防护：utils.formatDate 不接受 null/undefined，但模板里 validUntil 等字段可能为空
 function formatDate(d: string | Date | null | undefined): string {
   if (!d) return '-';
-  return new Date(d).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmtDate(d);
 }
 
-function formatMoney(n: number): string {
-  return `¥${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+const formatMoney = formatAmount;
 
 function buildHTML(data: QuotePDFData): string {
   const itemsRows = data.items.map((item) => `

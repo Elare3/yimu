@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/Badge';
-import { formatAmount, formatDate } from '@/lib/utils';
+import { formatAmount, formatDate, isOverdueDate } from '@/lib/utils';
 import { toast } from '@/stores/toastStore';
 
 interface PaymentNodeData {
@@ -34,9 +34,10 @@ export default function PaymentCard({ node, onMarkPaid, onRemind, onDelete, onUp
   const [notesValue, setNotesValue] = useState(node.notes || '');
   const [saving, setSaving] = useState(false);
 
+  // 截止当天 24:00 之前都不算逾期（北京时间）
   const isOverdue = () => {
     if (node.status === 'paid') return false;
-    return new Date(node.dueDate) < new Date();
+    return isOverdueDate(node.dueDate);
   };
 
   const handleSaveNotes = async () => {

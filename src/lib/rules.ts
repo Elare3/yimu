@@ -506,46 +506,51 @@ export const HEALTH_SCORE_RULES = {
 // 工具函数
 // ═══════════════════════════════════════
 
+// 周分组与"本周"判断按北京时间。原版用 d.getDay()/setDate 走服务器本地 TZ，
+// UTC 服务器会把北京周日 23:30 的 deadline 归到下一周。
 function getWeekKey(date: Date): string {
-  const d = new Date(date);
-  d.setDate(d.getDate() - d.getDay());
-  return `${d.getMonth() + 1}月${Math.ceil(d.getDate() / 7)}`;
+  // 用 BJ_OFFSET 平移到 UTC 维度，按周日往前回退到周日（保留原版 getDay() 周日=0 起点语义）
+  const BJ_OFFSET_MS = 8 * 60 * 60 * 1000;
+  const bj = new Date(date.getTime() + BJ_OFFSET_MS);
+  const day = bj.getUTCDay(); // 0=Sun .. 6=Sat
+  bj.setUTCDate(bj.getUTCDate() - day);
+  return `${bj.getUTCMonth() + 1}月${Math.ceil(bj.getUTCDate() / 7)}`;
 }
 
 function isThisWeek(date: Date): boolean {
-  const now = new Date();
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay());
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 7);
+  const BJ_OFFSET_MS = 8 * 60 * 60 * 1000;
+  const nowBj = new Date(Date.now() + BJ_OFFSET_MS);
+  const day = nowBj.getUTCDay();
+  // 北京本周日 00:00 的"墙上时间"（UTC 维度）
+  const weekStartBjWall = new Date(
+    Date.UTC(nowBj.getUTCFullYear(), nowBj.getUTCMonth(), nowBj.getUTCDate() - day),
+  );
+  // 还原到绝对时间
+  const weekStart = new Date(weekStartBjWall.getTime() - BJ_OFFSET_MS);
+  const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
   return date >= weekStart && date < weekEnd;
 }
 
-/** 根据付款触发条件计算到期日 */
+/** 根据付款触发条件计算到期日（按北京时间日历日 + 北京时间 23:59:59.999） */
 export function calculateDueDate(trigger: string, startDate?: Date | null): Date {
   const base = startDate || new Date();
-  function eod(d: Date): Date {
-    d.setHours(23, 59, 59, 999);
-    return d;
+  // "北京日历日 + N 天后的 23:59:59.999" 的绝对时刻：
+  // 1) 把 base 平移到北京时间下的"今天 00:00"
+  // 2) +N 天
+  // 3) +1 天 - 1ms = 当天 23:59:59.999（北京）
+  const BJ_OFFSET_MS = 8 * 60 * 60 * 1000;
+  function bjEodAfterDays(d: Date, days: number): Date {
+    const bjMs = d.getTime() + BJ_OFFSET_MS;
+    const bjMidnightAsUtc = Math.floor(bjMs / 86_400_000) * 86_400_000;
+    const baseAbs = bjMidnightAsUtc - BJ_OFFSET_MS;
+    return new Date(baseAbs + (days + 1) * 86_400_000 - 1);
   }
   switch (trigger) {
-    case 'sign': return eod(new Date(base));
-    case 'design_confirm': {
-      const d = new Date(base);
-      d.setDate(d.getDate() + 14);
-      return eod(d);
-    }
-    case 'midterm': {
-      const d = new Date(base);
-      d.setDate(d.getDate() + 30);
-      return eod(d);
-    }
-    case 'delivery': {
-      const d = new Date(base);
-      d.setDate(d.getDate() + 45);
-      return eod(d);
-    }
-    default: return eod(new Date(base));
+    case 'sign': return bjEodAfterDays(new Date(base), 0);
+    case 'design_confirm': return bjEodAfterDays(new Date(base), 14);
+    case 'midterm': return bjEodAfterDays(new Date(base), 30);
+    case 'delivery': return bjEodAfterDays(new Date(base), 45);
+    default: return bjEodAfterDays(new Date(base), 0);
   }
 }
 

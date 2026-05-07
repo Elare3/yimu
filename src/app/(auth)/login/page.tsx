@@ -112,28 +112,36 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    // 客户端先做一次 SHA-256 预哈希（绑定手机号），避免 DevTools / 代理日志看到明文密码
-    const hashedPassword = await preHashPassword(phone, password);
+    try {
+      // 客户端先做一次 SHA-256 预哈希（绑定手机号），避免 DevTools / 代理日志看到明文密码
+      // 非安全上下文（HTTP+IP）下 crypto.subtle 不可用，client-password.ts 内部会落到纯 JS 兜底
+      const hashedPassword = await preHashPassword(phone, password);
 
-    const res = await signIn('password', {
-      phone,
-      password: hashedPassword,
-      redirect: false,
-    });
+      const res = await signIn('password', {
+        phone,
+        password: hashedPassword,
+        redirect: false,
+      });
 
-    if (res?.error) {
-      if (res.error.includes('未设置密码')) {
-        setError('该手机号已通过验证码注册，请使用验证码登录后在设置中添加密码');
-      } else if (res.error.includes('密码错误')) {
-        setError('密码错误，请重试');
-      } else {
-        setError(res.error);
+      if (res?.error) {
+        if (res.error.includes('未设置密码')) {
+          setError('该手机号已通过验证码注册，请使用验证码登录后在设置中添加密码');
+        } else if (res.error.includes('密码错误')) {
+          setError('密码错误，请重试');
+        } else {
+          setError(res.error);
+        }
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-    } else {
+
       await persistSession(remember);
       setStage('success');
       setTimeout(() => router.push('/dashboard'), 1500);
+    } catch (e) {
+      // 防止 preHashPassword / signIn 抛异常导致按钮永远卡在"请稍候..."
+      setError(e instanceof Error && e.message ? e.message : '登录失败，请重试');
+      setLoading(false);
     }
   }, [phone, password, confirmPassword, isRegister, router, persistSession, remember]);
 

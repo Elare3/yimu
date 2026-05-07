@@ -149,6 +149,9 @@ export default function PaymentsPage() {
       } else {
         toast.error(result.error || '生成失败');
       }
+    } catch {
+      // 网络错误 / JSON 解析失败：避免按钮静默回到 idle 让用户以为成功
+      toast.error('网络错误，请稍后重试');
     } finally {
       setRemindLoading(null);
     }

@@ -11,22 +11,29 @@ datasource db {
 
 // ── 用户 ──
 model User {
-  id            String        @id @default(cuid())
-  phone         String        // 存储密文（AES-GCM，随机 IV），不建索引
-  phoneHash     String?       @unique // HMAC-SHA256(phone)，登录/绑定/唯一性查询用
-  passwordHash  String?       // 可选：通过验证码登录时可不设置
-  name          String        @default("")
-  companyName   String        @default("")
-  avatarUrl     String        @default("")
-  businessType  String        @default("other") // design|development|consulting|content|operations|other
-  entityType    String        @default("freelance") // individual|sole_proprietor|micro_company|freelance
-  plan          String        @default("free") // free|pro|premium
-  planExpiresAt DateTime?
-  privacyMode   String        @default("standard") // standard|strict
-  settings      UserSettings?
+  id                  String        @id @default(cuid())
+  phone               String // 存储密文（AES-GCM，随机 IV），不建索引
+  phoneHash           String?       @unique // HMAC-SHA256(phone)，登录/绑定/唯一性查询用
+  passwordHash        String? // 可选：通过验证码登录时可不设置
+  name                String        @default("")
+  companyName         String        @default("")
+  avatarUrl           String        @default("")
+  businessType        String        @default("other") // design|development|consulting|content|operations|other
+  entityType          String        @default("freelance") // individual|sole_proprietor|micro_company|freelance
+  plan                String        @default("free") // free|pro|premium
+  planExpiresAt       DateTime?
+  privacyMode         String        @default("standard") // standard|strict
+  // 邮箱（可选 - 用于通知，注册走手机号）
+  email               String?       @unique
+  emailVerified       Boolean       @default(false)
+  // 通知偏好（默认开启逾期、即将到期、报价快过期）
+  notifyOverdue       Boolean       @default(true)
+  notifyDueSoon       Boolean       @default(true)
+  notifyQuoteExpiring Boolean       @default(true)
+  settings            UserSettings?
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   clients      Client[]
   projects     Project[]
@@ -37,12 +44,12 @@ model User {
 
 // 由 MongoDB 的 embedded type 迁移为 1:1 关联表
 model UserSettings {
-  id                  String  @id @default(cuid())
-  userId              String  @unique
-  currency            String  @default("CNY")
-  taxRate             Float   @default(0)
-  paymentReminderDays Int[]   @default([3, 1, 0])
-  defaultPaymentTerms String  @default("")
+  id                  String @id @default(cuid())
+  userId              String @unique
+  currency            String @default("CNY")
+  taxRate             Float  @default(0)
+  paymentReminderDays Int[]  @default([3, 1, 0])
+  defaultPaymentTerms String @default("")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -78,26 +85,26 @@ model Client {
 
 // ── 项目 ──
 model Project {
-  id            String        @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   clientId      String
   name          String
-  description   String        @default("")
-  status        String        @default("quoted") // quoted|in_progress|review|completed|cancelled
-  priority      String        @default("medium") // low|medium|high
-  category      String        @default("")
-  manager       String        @default("")
-  totalAmount   Float         @default(0)
-  paidAmount    Float         @default(0)
+  description   String    @default("")
+  status        String    @default("quoted") // quoted|in_progress|review|completed|cancelled
+  priority      String    @default("medium") // low|medium|high
+  category      String    @default("")
+  manager       String    @default("")
+  totalAmount   Float     @default(0)
+  paidAmount    Float     @default(0)
   startDate     DateTime?
   deadline      DateTime?
   completedAt   DateTime?
-  revisionCount Int           @default(0)
+  revisionCount Int       @default(0)
   revisionLimit Int?
-  tags          String[]      @default([])
-  notes         String        @default("")
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  tags          String[]  @default([])
+  notes         String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   user         User          @relation(fields: [userId], references: [id])
   client       Client        @relation(fields: [clientId], references: [id])
@@ -127,25 +134,25 @@ model Deliverable {
 
 // ── 报价单 ──
 model Quote {
-  id           String      @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
   projectId    String?
   clientId     String
   quoteNumber  String
   title        String
-  subtotal     Float       @default(0)
-  taxRate      Float       @default(0)
-  taxAmount    Float       @default(0)
-  discount     Float       @default(0)
-  total        Float       @default(0)
-  paymentTerms String      @default("")
+  subtotal     Float     @default(0)
+  taxRate      Float     @default(0)
+  taxAmount    Float     @default(0)
+  discount     Float     @default(0)
+  total        Float     @default(0)
+  paymentTerms String    @default("")
   validUntil   DateTime?
-  notes        String      @default("")
-  status       String      @default("draft") // draft|sent|accepted|rejected|expired
-  aiGenerated  Boolean     @default(false)
-  aiPrompt     String      @default("")
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  notes        String    @default("")
+  status       String    @default("draft") // draft|sent|accepted|rejected|expired
+  aiGenerated  Boolean   @default(false)
+  aiPrompt     String    @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   user    User        @relation(fields: [userId], references: [id])
   project Project?    @relation(fields: [projectId], references: [id])
@@ -307,6 +314,13 @@ model KnowledgeDoc {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // ── RAG 向量（C 组）──
+  // DashScope text-embedding-v3，1024维。空数组表示尚未计算（待 backfill 脚本生成）。
+  // 用 Float[] 而非 pgvector 类型：当前规模（10s-100s 文档）JS 端 cosine 比 DB 索引更快，且不依赖扩展。
+  embedding         Float[] @default([])
+  embeddingModel    String  @default("") // "dashscope:text-embedding-v3" 之类，方便重算时识别旧版本
+  embeddingTextHash String  @default("") // sha256(title+content)，内容变了哈希就变，触发重算
+
   @@index([category, isActive])
   @@index([isActive, tasks])
 }
@@ -322,7 +336,13 @@ model AITemplateCache {
   lastUsedAt   DateTime?
   createdAt    DateTime  @default(now())
 
+  // ── 语义缓存（C 组）──
+  // 把意图参数序列化成可读串后做 embedding，相似意图（cosine ≥ 阈值）共享模板，避免每个细微参数差异都打 AI。
+  intentText      String  @default("") // 用于 debug + 重算 embedding 时复用
+  intentEmbedding Float[] @default([]) // 1024维。空数组=未生成或上一次 AI 调用失败
+
   @@index([task, intentHash])
+  @@index([task]) // 语义查找时按 task 过滤候选
 }
 
 // ── AI调用日志（隐私审计） ──

@@ -8,7 +8,11 @@ import { Loading } from '@/components/ui/Loading';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import ProjectForm from '@/components/business/ProjectForm';
-import { formatAmount, formatDate, STATUS_TRANSITIONS, STATUS_LABELS } from '@/lib/utils';
+import { formatAmount, formatDate } from '@/lib/utils';
+import {
+  PROJECT_STATUS_LABELS as STATUS_LABELS,
+  PROJECT_STATUS_TRANSITIONS as STATUS_TRANSITIONS,
+} from '@/lib/constants';
 import { toast } from '@/stores/toastStore';
 
 const PRIORITY_LABELS: Record<string, string> = {

@@ -91,6 +91,9 @@ export default function AIFinancePage() {
       } else {
         toast.error(result.error || '保存失败');
       }
+    } catch {
+      // 网络错误 / JSON 解析失败：明确告知用户，不要让 UI 显得"成功了"
+      toast.error('网络错误，请稍后重试');
     } finally {
       setSaving(false);
     }
